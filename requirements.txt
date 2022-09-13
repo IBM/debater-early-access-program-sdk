@@ -1,0 +1,8 @@
+requests
+prettytable
+sklearn
+matplotlib
+numpy
+pandas
+spacy
+PyHamcrest
