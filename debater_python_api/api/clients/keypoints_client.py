@@ -1,18 +1,14 @@
 import logging
-import os
 import time
 import calendar
 import traceback
-from collections import defaultdict
-from pathlib import Path
 
 import requests
 from debater_python_api.api.clients.abstract_client import AbstractClient
 from debater_python_api.utils.general_utils import get_default_request_header
 from typing import List, Optional, Dict
-import pandas as pd
-import numpy as np
 from debater_python_api.utils.kp_analysis_utils import print_progress_bar
+from debater_python_api.api.clients.key_point_analysis.KpaExceptions import KpaIllegalInputException
 
 domains_endpoint = '/domains'
 comments_endpoint = '/comments'
@@ -21,224 +17,6 @@ data_endpoint = '/data'
 report_endpoint = '/report'
 comments_limit_endpoint = '/comments_limit'
 self_check_endpoint = '/self_check'
-
-
-class KpAnalysisUtils:
-    '''
-    A class with static methods for utilities that assist with the key point analysis service.
-    '''
-
-    @staticmethod
-    def print_result(result, print_matches=False):
-        '''
-        Prints the key point analysis result to console.
-        :param result: the result, returned by method get_result in KpAnalysisTaskFuture.
-        '''
-        def print_kp(kp, n_matches, n_matches_subtree, depth, print_matches, keypoint_matching):
-            spaces = '     ' * depth
-            has_n_matches_subtree = n_matches_subtree is not None
-            print('%s    %d%s - %s' % (spaces, n_matches_subtree if has_n_matches_subtree else n_matches,
-                                       (' - %d' % n_matches) if has_n_matches_subtree else '', kp))
-            if print_matches:
-                for match in keypoint_matching['matching']:
-                    print('%s    %s - %s' % (spaces + '    ', str(match['score']), match['sentence_text']))
-
-        kp_to_n_matches_subtree = defaultdict(int)
-        parents = list()
-        parent_to_kids = defaultdict(list)
-        for keypoint_matching in result['keypoint_matchings']:
-            kp = keypoint_matching['keypoint']
-            kp_to_n_matches_subtree[kp] += len(keypoint_matching['matching'])
-            parent = keypoint_matching.get("parent", None)
-            if parent is None or parent == 'root':
-                parents.append(keypoint_matching)
-            else:
-                parent_to_kids[parent].append(keypoint_matching)
-                kp_to_n_matches_subtree[parent] += len(keypoint_matching['matching'])
-
-        parents.sort(key=lambda x: kp_to_n_matches_subtree[x['keypoint']], reverse=True)
-
-        print('Result:')
-        for parent in parents:
-            kp = parent['keypoint']
-            print_kp(kp, len(parent['matching']), None if len(parent_to_kids[kp]) == 0 else kp_to_n_matches_subtree[kp], 0, print_matches, parent)
-            for kid in parent_to_kids[kp]:
-                kid_kp = kid['keypoint']
-                print_kp(kid_kp, len(kid['matching']), None, 1, print_matches, kid)
-
-    @staticmethod
-    def print_report(user_report):
-        '''
-        Prints the user_report to console.
-        :param user_report: the user report, returned by method get_full_report in KpAnalysisClient.
-        '''
-        logging.info('User Report:')
-        comments_statuses = user_report['comments_status']
-        logging.info('  Comments status by domain (%d domains):' % len(comments_statuses))
-        if len(comments_statuses) == 0:
-            logging.info('    User has no domains')
-        else:
-            for domain in comments_statuses:
-                logging.info('    Domain: %s, Status: %s ' % (domain, str(comments_statuses[domain])))
-        kp_analysis_statuses = user_report['kp_analysis_status']
-        logging.info('  Key point analysis - jobs status (%d jobs):' % len(kp_analysis_statuses))
-        if len(kp_analysis_statuses) == 0:
-            logging.info('    User has no key point analysis jobs history')
-        else:
-            for kp_analysis_status in kp_analysis_statuses:
-                logging.info('    Job: ' + str(kp_analysis_status))
-
-    @staticmethod
-    def set_stance_to_result(result, stance):
-        for keypoint_matching in result['keypoint_matchings']:
-            keypoint_matching['stance'] = stance
-        return result
-
-    @staticmethod
-    def merge_two_results(result1, result2):
-        result = {'keypoint_matchings': result1['keypoint_matchings'] + result2['keypoint_matchings']}
-        result['keypoint_matchings'].sort(key=lambda matchings: len(matchings['matching']), reverse=True)
-        return result
-
-    @staticmethod
-    def write_result_to_csv(result, result_file):
-        '''
-        Writes the key point analysis result to file.
-        Creates two files:
-        * matches file: a file with all sentence-key point matches, saved in result_file path.
-        * summary file: a summary file with all key points and their aggregated information, saved in result_file path with suffix: _kps_summary.csv.
-        :param result: the result, returned by method get_result in KpAnalysisTaskFuture.
-        :param result_file: a path to the file that will be created (should have a .csv suffix, otherwise it will be added).
-        '''
-        def _write_df_to_file(df, file):
-            logging.info("Writing dataframe to: " + file)
-            file_path = Path(file)
-            if not os.path.exists(file_path.parent):
-                logging.info('creating directory: %s' % str(file_path.parent))
-                os.makedirs(file_path.parent)
-            df.to_csv(file, index=False)
-
-        if 'keypoint_matchings' not in result:
-            logging.info("No keypoint matchings results")
-            return
-
-        if '.csv' not in result_file:
-            result_file += '.csv'
-
-        total_sentences = np.sum([len(keypoint_matching['matching']) for keypoint_matching in result['keypoint_matchings']])
-        all_comment_ids = set([m["comment_id"] for keypoint_matching in result['keypoint_matchings'] for m in keypoint_matching['matching']])
-        total_comments = len(all_comment_ids)
-
-        summary_rows = []
-        matchings_rows = []
-        kp_to_parent = {}
-        kps_have_stance = False
-        sentences_have_stance = False
-        for keypoint_matching in result['keypoint_matchings']:
-            kp = keypoint_matching['keypoint']
-            kp_stance = keypoint_matching.get('stance', None)
-            n_sentences = len(keypoint_matching['matching'])
-            sentence_coverage = n_sentences / total_sentences if total_sentences > 0 else 0.0
-            n_comments = len(set([m["comment_id"] for m in keypoint_matching['matching']]))
-            comments_coverage = n_comments / total_comments if total_comments > 0 else 0.0
-
-            summary_row = [kp, n_sentences, sentence_coverage, n_comments, comments_coverage]
-            if kp_stance is not None:
-                summary_row.append(kp_stance)
-                kps_have_stance = True
-
-            summary_rows.append(summary_row)
-            kp_to_parent[kp] = keypoint_matching.get("parent", 'root')
-            for match in keypoint_matching['matching']:
-                match_row = [kp, match["sentence_text"], match["score"], match["comment_id"], match["sentence_id"],
-                             match["sents_in_comment"], match["span_start"], match["span_end"], match["num_tokens"],
-                             match["argument_quality"]]
-
-                if 'stance' in match:
-                    match_row.append(match['stance'])
-                    sentences_have_stance = True
-                if kp_stance is not None:
-                    match_row.append(kp_stance)
-                matchings_rows.append(match_row)
-
-        summary_rows = sorted(summary_rows, key=lambda x: x[1], reverse=True)
-        summary_cols = ["kp", "#sentences", 'sentences_coverage', '#comments', 'comments_coverage']
-        if kps_have_stance:
-            summary_cols.append('stance')
-        summary_df = pd.DataFrame(summary_rows, columns=summary_cols)
-
-        if len(set(kp_to_parent.values())) > 1:
-            summary_df.loc[:, "parent"] = summary_df.apply(lambda x: kp_to_parent[x["kp"]], axis=1)
-            parent_to_kps = {p: list(filter(lambda x: kp_to_parent[x] == p, kp_to_parent.keys()))
-                             for p in set(kp_to_parent.values())}
-            parent_to_kps.update({p: [] for p in set(parent_to_kps["root"]).difference(parent_to_kps.keys())})
-            kp_to_n_args = dict(zip(summary_df["kp"],summary_df["#sentences"]))
-            kp_to_n_args_sub = {kp: np.sum([kp_to_n_args[c_kp] for c_kp in set(parent_to_kps.get(kp, []) + [kp])])
-                                for kp in kp_to_parent}
-            kp_to_n_args_sub["root"] = np.sum(list(summary_df["#sentences"]))
-            summary_df.loc[:, "#sents_in_subtree"] = summary_df.apply(lambda x: kp_to_n_args_sub[x["kp"]], axis=1)
-
-            hierarchy_data = [[p, len(parent_to_kps[p]), kp_to_n_args_sub[p], parent_to_kps[p]] for p in parent_to_kps]
-            hierarchy_df = pd.DataFrame(hierarchy_data, columns=["top_kp", "#level_2_kps", "#sents_in_subtree", "level_2_kps"])
-            hierarchy_df.sort_values(by=["#sents_in_subtree"], ascending=False, inplace=True)
-
-            hierarchy_file = result_file.replace(".csv", "_kp_hierarchy.csv")
-            _write_df_to_file(hierarchy_df, hierarchy_file)
-
-        summary_file = result_file.replace(".csv", "_kps_summary.csv")
-        _write_df_to_file(summary_df, summary_file)
-
-        matchings_cols = ["kp", "sentence_text", "match_score", 'comment_id', 'sentence_id', 'sents_in_comment', 'span_start',
-                'span_end', 'num_tokens', 'argument_quality']
-        if sentences_have_stance:
-            matchings_cols.append('stance_dict')
-        if kps_have_stance:
-            matchings_cols.append('kp_stance')
-        match_df = pd.DataFrame(matchings_rows, columns=matchings_cols)
-        _write_df_to_file(match_df, result_file)
-
-    @staticmethod
-    def write_sentences_to_csv(sentences, out_file):
-        if len(sentences) == 0:
-            logging.info('there are no sentences, not saving file')
-            return
-
-        cols = list(sentences[0].keys())
-        rows = [[s[col] for col in cols] for s in sentences]
-        df = pd.DataFrame(rows, columns=cols)
-        df.to_csv(out_file, index=False)
-
-    @staticmethod
-    def init_logger():
-        '''
-        Inits the logger for more informative console prints.
-        '''
-        from logging import getLogger, getLevelName, Formatter, StreamHandler
-        log = getLogger()
-        log.setLevel(getLevelName('INFO'))
-        log_formatter = Formatter("%(asctime)s [%(levelname)s] %(filename)s %(lineno)d: %(message)s")
-
-        console_handler = StreamHandler()
-        console_handler.setFormatter(log_formatter)
-        log.handlers = []
-        log.addHandler(console_handler)
-
-    @staticmethod
-    def create_domain_ignore_exists(client, domain, domain_params):
-        try:
-            client.create_domain(domain, domain_params)
-            print(f'domain: {domain} was created')
-        except KpaIllegalInputException as e:
-            if 'already exist' not in str(e):
-                raise e
-            print(f'domain: {domain} already exists, domain_params are NOT updated.')
-
-
-class KpaIllegalInputException(Exception):
-    '''
-    This exception is thrown when the user passes an illegal input.
-    '''
-    pass
 
 
 class KpAnalysisClient(AbstractClient):
@@ -299,12 +77,16 @@ class KpAnalysisClient(AbstractClient):
 
     def create_domain(self, domain, domain_params=None):
         '''
-        Creates a new domain and enables users to set domain parameters.
+        Create a new domain and customize domain's parameters.
+        By default, comments that are uploaded into a domain are over go minor cleansing and then split into sentences.
+        However, sometimes users have better domain-knowledge and prefer to handle their data themselves.
+        Therefore, users that want to clean their comments and split them into sentences can use the dont_split parameter and set it to True,
+        and the uploaded comments will be kept as is.
         :param domain: the name of the new domain (must not exist already)
         :param domain_params: a dictionary with various parameters for the domain. Supported values:
         * dont_split: (Boolean, set to False by default), when set to True, the comments uploaded to the domain will not be cleaned and not be split into sentences.
-        * dc: (String) a dominant-concept to use as a topic for the argument_quality service
-        * motion: (String) a motion to use as a topic for the argument_quality service (either use motion or dc, not both)
+        * do_stance_analysis: (Boolean, set to False by default), when set to True, stance (positive, negative, neutral, suggestion) is calculated for all sentences (needed when we want to run on each stance seperatly).
+        * do_kp_quality: (Boolean, set to False by default), When set to true, keypoint quality is calculated for all sentences (needed when we want to use the kp_quality model for key point selection).
         '''
         body = {'domain': domain}
         if domain_params is not None:
@@ -314,28 +96,24 @@ class KpAnalysisClient(AbstractClient):
         logging.info('created domain: %s with domain_params: %s' % (domain, str(domain_params)))
 
 
-    def upload_comments(self, domain: str, comments_ids: List[str], comments_texts: List[str], dont_split=False, batch_size: int = 2000) -> None:
+    def upload_comments(self, domain: str, comments_ids: List[str], comments_texts: List[str], batch_size: int = 2000) -> None:
         '''
-        Uploads comments into a domain. These comments are processed and splitted into sentences.
-        It is not mandatory to create domain before uploading comments. If the domain doesn't exist, a domain with default parameters will be created.
-        When we need to change domain params, we must create it first via create_domain method.
-        Users can clean their comments and split them into sentences themselves, if they wish to do so.
-        In this case, dont_split parameter should be set to True, and the uploaded comments will be kept as is.
+        Uploads comments into a domain. It is not mandatory to create a domain before uploading comments into it.
+        If the domain doesn't exist, a domain with default parameters will be created.
+        When we need to change domain's parameters, we must create it first via create_domain method.
         Re-uploading the same comments (same domain + comment_id, text is ignored) is not problematic (and relativly quick).
         Processing comments (cleaning + sentence splitting + calculating quality etc.) takes some time,
         please wait for it to finish before starting a key point analysis job (using method wait_till_all_comments_are_processed).
-        :param domain: the name of the domain to upload the comments into. (usually one per data-set).
+        :param domain: the name of the domain to upload the comments into. (usually one  per data-set).
         :param comments_ids: a list of comment ids (strings), comment ids must be unique.
         :param comments_texts: a list of comments (strings), this list must be the same length as comments_ids and the comment_id and comment_text should match by position in the list.
-        :param dont_split: when set to True, the comments uploaded to the domain will not be cleaned and not be split into sentences.
         :param batch_size: the number of comments that will be uploaded in every REST-API call.
         '''
         assert len(comments_ids) == len(comments_texts), 'comments_texts and comments_ids must be the same length'
         assert len(comments_ids) == len(set(comments_ids)), 'comment_ids must be unique'
         assert self._is_list_of_strings(comments_texts), 'comment_texts must be a list of strings'
         assert self._is_list_of_strings(comments_ids), 'comment_ids must be a list of strings'
-        assert len([c for c in comments_texts if len(c) > 1000]) == 0, 'comment_texts must be shorter then 1000 characters'
-        assert len([c for c in comments_texts if c is None or c == '' or len(c) == 0]) == 0, 'comment_texts must not have an empty string in it'
+        assert len([c for c in comments_texts if c is None or c == '' or len(c) == 0 or c.isspace()]) == 0, 'comment_texts must not have an empty string in it'
         logging.info('uploading %d comments in batches' % len(comments_ids))
 
         ids_texts = list(zip(comments_ids, comments_texts))
@@ -347,9 +125,6 @@ class KpAnalysisClient(AbstractClient):
             body = {'domain': domain,
                     'comments_ids': comments_ids,
                     'comments_texts': comments_texts}
-
-            if dont_split:
-                body['dont_split'] = True
 
             self._post(url=self.host + comments_endpoint, body=body, retries=10)
             uploaded += len(batch)
@@ -421,7 +196,7 @@ class KpAnalysisClient(AbstractClient):
             body['description'] = description
 
         res = self._post(url=self.host + kp_extraction_endpoint, body=body, use_cache=use_cache)
-        logging.info('started a kp analysis job - domain: %s, job_id: %s' % (domain, res['job_id']))
+        logging.info(f'started a kp analysis job - domain: {domain}, run_params: {run_params}, {"" if description is None else f"description: {description}, "}job_id: {res["job_id"]}')
         return KpAnalysisTaskFuture(self, res['job_id'])
 
     def get_kp_extraction_job_status(self, job_id: str, top_k_kps: Optional[int] = None,

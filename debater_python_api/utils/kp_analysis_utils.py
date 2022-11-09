@@ -1,4 +1,6 @@
 import logging
+from collections import defaultdict
+
 import pandas as pd
 import numpy as np
 
@@ -93,3 +95,18 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
     # Print New Line on Complete
     if iteration == total:
         print()
+
+def argmax(lst):
+    if len(lst) == 0:
+        return None
+
+    max_val = max(lst)
+    for i in range(len(lst)):
+        if lst[i] == max_val:
+            return i
+
+def create_dict_to_list(list_tups):
+    res = defaultdict(list)
+    for x, y in list_tups:
+        res[x].append(y)
+    return dict(res)
