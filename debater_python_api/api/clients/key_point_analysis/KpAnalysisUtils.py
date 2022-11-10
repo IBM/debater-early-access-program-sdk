@@ -374,9 +374,9 @@ class KpAnalysisUtils:
 
         out_file = result_file.replace('.csv', '_graph_data.json')
         logging.info(f'saving graph in file: {out_file}')
-        logging.info(f'saving graph in file: {out_file}')
         with open(out_file, 'w') as f:
             json.dump(graph_data, f)
+        return out_file
 
     @staticmethod
     def graph_data_to_hierarchical(result_graph_data_json,
@@ -461,4 +461,28 @@ class KpAnalysisUtils:
             logging.info(f'saving graph in file: {out_file}')
             with open(out_file, 'w') as f:
                 json.dump(graph_data, f)
+
+    @staticmethod
+    def graph_data_to_hierarchical_graph_data(result_graph_data_json,
+                                              filter_small_nodes=-1,
+                                              filter_min_relations=-1):
+        KpAnalysisUtils.graph_data_to_hierarchical(result_graph_data_json,
+                                                   filter_small_nodes=filter_small_nodes,
+                                                   filter_min_relations=filter_min_relations,
+                                                   filter_big_to_small_edges=True,
+                                                   save_hierarchical_graph_data=True,
+                                                   save_hierarchical_textual_bullets=False)
+
+    @staticmethod
+    def graph_data_to_hierarchical_textual_bullets(result_graph_data_json,
+                                              filter_small_nodes=-1,
+                                              filter_min_relations=0.2):
+        KpAnalysisUtils.graph_data_to_hierarchical(result_graph_data_json,
+                                                   filter_small_nodes=filter_small_nodes,
+                                                   filter_min_relations=filter_min_relations,
+                                                   filter_big_to_small_edges=True,
+                                                   save_hierarchical_graph_data=False,
+                                                   save_hierarchical_textual_bullets=True)
+
+
 
