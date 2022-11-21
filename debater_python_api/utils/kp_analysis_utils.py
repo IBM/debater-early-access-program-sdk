@@ -1,5 +1,7 @@
 import logging
+import os
 from collections import defaultdict
+from pathlib import Path
 
 import pandas as pd
 import numpy as np
@@ -25,56 +27,6 @@ def print_report(report):
         print(str(kp_analysis_status))
 
 
-def write_results_to_csv(results, result_file):
-    if 'keypoint_matchings' not in results:
-        print("No keypoint matchings results")
-        return
-
-    keypoint_matchings = results['keypoint_matchings']
-    summary_list = []
-    match_list = []
-    total_args = 0
-    kp_to_parent = {}
-    for keypoint_matching in keypoint_matchings:
-        kp = keypoint_matching['keypoint']
-        num_args = len(keypoint_matching['matching'])
-        total_args += num_args
-        summary_list.append([kp, num_args])
-        kp_to_parent[kp] = keypoint_matching.get("parent", None)
-        for match in keypoint_matching['matching']:
-            match_list.append([kp, match["sentence_text"], match["score"]])
-    summary_df = pd.DataFrame(summary_list, columns=["kp", "#args"])
-    summary_df.loc[:, "coverage"] = summary_df.apply(lambda x: x["#args"] / total_args, axis=1)
-
-    if len(set(kp_to_parent.values())) > 1:
-        summary_df.loc[:, "parent"] = summary_df.apply(lambda x: kp_to_parent[x["kp"]], axis=1)
-        parent_to_kps = {p: list(filter(lambda x: kp_to_parent[x] == p, kp_to_parent.keys()))
-                         for p in set(kp_to_parent.values())}
-        parent_to_kps.update({p: [] for p in set(parent_to_kps["root"]).difference(parent_to_kps.keys())})
-        kp_to_n_args = dict(summary_list)
-        kp_to_n_args_sub = {kp: np.sum([kp_to_n_args[c_kp] for c_kp in set(parent_to_kps.get(kp, []) +[kp])])
-                            for kp in kp_to_parent}
-        kp_to_n_args_sub["root"] = np.sum(list(summary_df["#args"]))
-        summary_df.loc[:, "n_args_in_subtree"] = summary_df.apply(lambda x: kp_to_n_args_sub[x["kp"]], axis=1)
-
-        hierarchy_data = [[p, len(parent_to_kps[p]), kp_to_n_args_sub[p], parent_to_kps[p]] for p in parent_to_kps]
-        hierarchy_df = pd.DataFrame(hierarchy_data, columns=["top_kp", "n_level_2_kps", "n_args_subtree", "level_2_kps"])
-        hierarchy_df.sort_values(by=["n_args_subtree"], ascending=False)
-
-        h_result_file = result_file.replace(".csv", "_hierarchy.csv")
-        logging.info("Writing hierarchy results to: " + h_result_file)
-        hierarchy_df.to_csv(h_result_file)
-
-    match_df = pd.DataFrame(match_list, columns=["kp", "comment", "match"])
-
-    summary_file = result_file.replace(".csv", "_summary.csv")
-    logging.info("Writing results to: " + summary_file)
-    summary_df.to_csv(summary_file, index=False)
-
-    logging.info("Writing results to: " + result_file)
-    match_df.to_csv(result_file, index=False)
-
-
 def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█'):
     """
     Call in a loop to create terminal progress bar
@@ -96,17 +48,17 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
     if iteration == total:
         print()
 
-def argmax(lst):
-    if len(lst) == 0:
-        return None
-
-    max_val = max(lst)
-    for i in range(len(lst)):
-        if lst[i] == max_val:
-            return i
 
 def create_dict_to_list(list_tups):
     res = defaultdict(list)
     for x, y in list_tups:
         res[x].append(y)
     return dict(res)
+
+def write_df_to_file(df, file):
+    logging.info("Writing dataframe to: " + file)
+    file_path = Path(file)
+    if not os.path.exists(file_path.parent):
+        logging.info('creating directory: %s' % str(file_path.parent))
+        os.makedirs(file_path.parent)
+    df.to_csv(file, index=False)
