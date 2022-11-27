@@ -122,8 +122,12 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
         records = []
         # for m in n['data']['matches']:
         #     records.append([m["sentence_text"], trunc_float(float(m["match_score"]), 3)])
-        for i in range(min(len(kp_to_dicts[kp]), n_top_matches)):
-            d = kp_to_dicts[kp][i]
+
+        matches_dicts = kp_to_dicts[kp]
+        if n_top_matches is not None and n_top_matches < len(kp_to_dicts[kp]):
+            matches_dicts = matches_dicts[:n_top_matches]
+
+        for d in matches_dicts:
             records.append([d["sentence_text"], trunc_float(float(d["match_score"]), 4)])
 
         table = document.add_table(rows=1, cols=2)
