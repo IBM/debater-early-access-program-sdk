@@ -510,9 +510,12 @@ class KpAnalysisUtils:
 
 
     @staticmethod
-    def generate_graphs_and_textual_summary(result_file, filter_min_relations_for_text=0.4, n_top_matches_in_docx=None):
+    def generate_graphs_and_textual_summary(result_file, min_n_similar_matches_in_graph=5, n_top_matches_in_graph=20,
+                                            filter_min_relations_for_text=0.4, n_top_matches_in_docx=None):
         '''
         result_file: the ..._result.csv that is saved using write_result_to_csv method.
+        min_n_similar_matches_in_graph: the minimal number of matches that match both key points when calculating the relation between them.
+        n_top_matches_in_graph: number of top matches to add to the graph_data file.
         filter_min_relations_for_text: the minimal key points relation threshold, when creating the textual summaries.
         n_top_matches_in_docx: number of top matches to write in the textual summary (docx file). Pass None for all matches.
 
@@ -525,7 +528,9 @@ class KpAnalysisUtils:
             * <result_file>_hierarchical.txt: This textual file shows the simplified graph (from the previous bullet) as a list of hierarchical bullets.
             * <result_file>_hierarchical.docx: This Microsoft Word document shows the textual bullets (from the previous bullet) as a user-friendly report.
         '''
-        graph_data_full = KpAnalysisUtils.create_graph_data(result_file)  # creates graph_data
+        graph_data_full = KpAnalysisUtils.create_graph_data(result_file,
+                                                            min_n_similar_matches=min_n_similar_matches_in_graph,
+                                                            n_matches_samples=n_top_matches_in_graph)
         KpAnalysisUtils.save_graph_data(graph_data_full, result_file.replace('.csv', '_graph_data.json'))
 
         graph_data_hierarchical = KpAnalysisUtils.graph_data_to_hierarchical_graph_data(graph_data=graph_data_full)
