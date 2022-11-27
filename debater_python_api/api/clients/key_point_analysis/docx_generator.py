@@ -104,9 +104,12 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
     document.add_heading('Hierarchical Key points:\n', 1)
     id_to_kids = create_dict_to_list([(e['data']['target'], e['data']['source']) for e in edges])
 
+    logging.info('Creating key points hierarchy')
+
     id_to_paragraph1 = {}
     get_hierarchical_bullets(document, root_ids, id_to_kids, id_to_node, id_to_paragraph1, id_to_n_matches_subtree)
 
+    logging.info('Creating key points matches tables')
     dicts, _ = read_dicts_from_csv(result_file)
     kp_to_dicts = create_dict_to_list([(d['kp'], d) for d in dicts])
 
@@ -115,6 +118,7 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
         document.add_heading(f'\n\nAll matches per key point:\n', 1)
     else:
         document.add_heading(f'\n\nTop {n_top_matches} matches per key point:\n', 1)
+
     for n in nodes:
         p = document.add_paragraph()
         id_to_paragraph2[n['data']["id"]] = p
@@ -128,6 +132,8 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
         matches_dicts = kp_to_dicts[kp]
         if n_top_matches is not None and n_top_matches < len(kp_to_dicts[kp]):
             matches_dicts = matches_dicts[:n_top_matches]
+
+        logging.info(f'creating table for KP: {kp}, n_matches: {len(matches_dicts)}')
 
         for d in matches_dicts:
             records.append([d["sentence_text"], trunc_float(float(d["match_score"]), 4)])
