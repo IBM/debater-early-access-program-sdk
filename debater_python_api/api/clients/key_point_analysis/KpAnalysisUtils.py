@@ -1,10 +1,14 @@
+import ast
 import json
 import logging
+import math
 from collections import defaultdict
 import pandas as pd
 import numpy as np
 
 from debater_python_api.api.clients.key_point_analysis.KpaExceptions import KpaIllegalInputException
+from debater_python_api.api.clients.key_point_analysis.docx_generator import save_hierarchical_graph_data_to_docx
+from debater_python_api.api.clients.key_point_analysis.utils import read_dicts_from_csv
 from debater_python_api.utils.kp_analysis_utils import create_dict_to_list, write_df_to_file
 
 
@@ -328,7 +332,7 @@ class KpAnalysisUtils:
             logging.info(f'domain: {domain} doesn\'t exist.')
 
     @staticmethod
-    def create_graph_data_file_for_ui(result_file, min_n_similar_matches=5, n_matches_samples=20):
+    def create_graph_data(result_file, min_n_similar_matches=5, n_matches_samples=20):
         '''
         translates the result file (full result, not the summary) into a json that is loadable in the kpa-key-points-graph-ui
         :param result_file: full results file (with sentence to keypoint mappings).
@@ -363,29 +367,6 @@ class KpAnalysisUtils:
                           'score': round(e['score'], 2)
                           }})
             return graph_data
-
-        def create_dict_to_list(list_tups):
-            res = defaultdict(list)
-            for x, y in list_tups:
-                res[x].append(y)
-            return dict(res)
-
-        def read_tups_from_csv(filename):
-            logging.info(f'reading file: {filename}')
-            input_df = pd.read_csv(filename)
-            cols = list(input_df.columns)
-            tups = list(input_df.to_records(index=False))
-            tups = [tuple([str(v) if str(v) != 'nan' else '' for v in t]) for t in tups]
-            return tups, cols
-
-        def read_dicts_from_csv(filename):
-            tups, cols = read_tups_from_csv(filename)
-            dicts = [{} for _ in tups]
-            dicts_tups = list(zip(dicts, tups))
-            for i, c in enumerate(cols):
-                for d, t in dicts_tups:
-                    d[c] = t[i]
-            return dicts, cols
 
         def get_node(i, kp, kp_to_dicts, n_matches_samples):
             return {'id': i,
@@ -426,42 +407,23 @@ class KpAnalysisUtils:
         edges = [{'source': i, 'target': j, 'score': edge_to_score[i, j]} for (i, j) in edge_to_score]
         graph = {'nodes': nodes, 'edges': edges}
 
-        graph_data = graph_to_graph_data(graph, n_sentences)
-
-        out_file = result_file.replace('.csv', '_graph_data.json')
-        logging.info(f'saving graph in file: {out_file}')
-        with open(out_file, 'w') as f:
-            json.dump(graph_data, f)
-        return out_file
+        return graph_to_graph_data(graph, n_sentences)
 
     @staticmethod
-    def graph_data_to_hierarchical(result_graph_data_json,
-                                   filter_small_nodes=-1.0,
-                                   filter_min_relations=-1.0,
-                                   filter_big_to_small_edges=True,
-                                   save_hierarchical_textual_bullets=True,
-                                   save_hierarchical_graph_data=True):
-        def get_hierarchical_bullets_aux(id_to_kids, id_to_node, id, tab, res):
-            msg = f'{"  " * tab} * {id_to_node[id]["data"]["kp"]} ({id_to_node[id]["data"]["n_matches"]} matches)'
-            res.append(msg)
-            if id in id_to_kids:
-                kids = id_to_kids[id]
-                kids = sorted(kids, key=lambda n: int(id_to_node[n]['data']['n_matches']), reverse=True)
-                for k in kids:
-                    get_hierarchical_bullets_aux(id_to_kids, id_to_node, k, tab + 1, res)
+    def graph_data_to_hierarchical_graph_data(graph_data_json_file=None,
+                                              graph_data=None,
+                                              filter_small_nodes=-1.0,
+                                              filter_min_relations=-1.0,
+                                              filter_big_to_small_edges=True):
+        if (graph_data_json_file is None and graph_data is None) or (graph_data_json_file is not None and graph_data is not None):
+            logging.error('Please pass either graph_data_json_file or graph_data')
 
-        def get_hierarchical_bullets(roots, id_to_kids, id_to_node):
-            res = []
-            tab = 0
-            roots = sorted(roots, key=lambda n: int(id_to_node[n]['data']['n_matches']), reverse=True)
-            for root in roots:
-                get_hierarchical_bullets_aux(id_to_kids, id_to_node, root, tab, res)
-            return res
+        if graph_data_json_file is not None:
+            print(f'creating hierarchical graph from file: {graph_data_json_file}')
+            graph_data = json.load(open(graph_data_json_file))
 
-        print(f'creating hierarchical graph from file: {result_graph_data_json}')
-        data = json.load(open(result_graph_data_json))
-        nodes = [d for d in data if d['type'] == 'node']
-        edges = [d for d in data if d['type'] == 'edge']
+        nodes = [d for d in graph_data if d['type'] == 'node']
+        edges = [d for d in graph_data if d['type'] == 'edge']
 
         if filter_small_nodes > 0.0:
             nodes = [n for n in nodes if
@@ -490,55 +452,93 @@ class KpAnalysisUtils:
             id_to_max_parent[id] = max_parent
 
         edges = [e for e in edges if e['data']['source'] in id_to_max_parent and id_to_max_parent[e['data']['source']] == e['data']['target']]
+        return nodes + edges
 
-        if save_hierarchical_textual_bullets:
-            id_to_kids = create_dict_to_list([(e['data']['target'], e['data']['source']) for e in edges])
-            all_kids = set()
-            for id, kids in id_to_kids.items():
-                all_kids = all_kids.union(kids)
 
-            root_ids = set(nodes_ids).difference(all_kids)
-            res = get_hierarchical_bullets(root_ids, id_to_kids, id_to_node)
-            if '_graph_data.json' in result_graph_data_json:
-                out_file = result_graph_data_json.replace('_graph_data.json', '_hierarchical.txt')
-            else:
-                out_file = result_graph_data_json.replace('.json', '_hierarchical.txt')
-            logging.info(f'saving graph in file: {out_file}')
+    @staticmethod
+    def save_graph_data(graph_data, out_file):
+        logging.info(f'saving graph in file: {out_file}')
+        with open(out_file, 'w') as f:
+            json.dump(graph_data, f)
+
+
+    @staticmethod
+    def hierarchical_graph_data_to_textual_bullets(graph_data_json_file=None, graph_data=None, out_file=None):
+        def get_hierarchical_bullets_aux(id_to_kids, id_to_node, id, tab, res):
+            msg = f'{"  " * tab} * {id_to_node[id]["data"]["kp"]} ({id_to_node[id]["data"]["n_matches"]} matches)'
+            res.append(msg)
+            if id in id_to_kids:
+                kids = id_to_kids[id]
+                kids = sorted(kids, key=lambda n: int(id_to_node[n]['data']['n_matches']), reverse=True)
+                for k in kids:
+                    get_hierarchical_bullets_aux(id_to_kids, id_to_node, k, tab + 1, res)
+
+        def get_hierarchical_bullets(roots, id_to_kids, id_to_node):
+            res = []
+            tab = 0
+            roots = sorted(roots, key=lambda n: int(id_to_node[n]['data']['n_matches']), reverse=True)
+            for root in roots:
+                get_hierarchical_bullets_aux(id_to_kids, id_to_node, root, tab, res)
+            return res
+
+        if (graph_data_json_file is None and graph_data is None) or (graph_data_json_file is not None and graph_data is not None):
+            logging.error('Please pass either graph_data_json_file or graph_data')
+
+        if graph_data_json_file is not None:
+            print(f'creating hierarchical graph from file: {graph_data_json_file}')
+            graph_data = json.load(open(graph_data_json_file))
+
+        nodes = [d for d in graph_data if d['type'] == 'node']
+        edges = [d for d in graph_data if d['type'] == 'edge']
+
+        nodes_ids = [n['data']['id'] for n in nodes]
+        id_to_node = {d['data']['id']: d for d in nodes}
+
+        id_to_kids = create_dict_to_list([(e['data']['target'], e['data']['source']) for e in edges])
+        all_kids = set()
+        for id, kids in id_to_kids.items():
+            all_kids = all_kids.union(kids)
+
+        root_ids = set(nodes_ids).difference(all_kids)
+        bullets_txt = get_hierarchical_bullets(root_ids, id_to_kids, id_to_node)
+        if out_file is not None:
+            logging.info(f'saving textual bullets in file: {out_file}')
             with open(out_file, 'w') as f:
-                for line in res:
+                for line in bullets_txt:
                     f.write("%s\n" % line)
+        return bullets_txt
 
-        if save_hierarchical_graph_data:
-            graph_data = nodes + edges
-            if '_graph_data.json' in result_graph_data_json:
-                out_file = result_graph_data_json.replace('_graph_data.json', '_hierarchical_graph_data.json')
-            else:
-                out_file = result_graph_data_json.replace('.json', '_hierarchical_graph_data.json')
-            logging.info(f'saving graph in file: {out_file}')
-            with open(out_file, 'w') as f:
-                json.dump(graph_data, f)
 
     @staticmethod
-    def graph_data_to_hierarchical_graph_data(result_graph_data_json,
-                                              filter_small_nodes=-1,
-                                              filter_min_relations=-1):
-        KpAnalysisUtils.graph_data_to_hierarchical(result_graph_data_json,
-                                                   filter_small_nodes=filter_small_nodes,
-                                                   filter_min_relations=filter_min_relations,
-                                                   filter_big_to_small_edges=True,
-                                                   save_hierarchical_graph_data=True,
-                                                   save_hierarchical_textual_bullets=False)
+    def generate_graphs_and_textual_summary(result_file, filter_min_relations_for_text=0.4, n_top_matches_in_docx=None):
+        '''
+        result_file: the ..._result.csv that is saved using write_result_to_csv method.
+        filter_min_relations_for_text: the minimal key points relation threshold, when creating the textual summaries.
+        n_top_matches_in_docx: number of top matches to write in the textual summary (docx file). Pass None for all matches.
 
-    @staticmethod
-    def graph_data_to_hierarchical_textual_bullets(result_graph_data_json,
-                                              filter_small_nodes=-1,
-                                              filter_min_relations=0.2):
-        KpAnalysisUtils.graph_data_to_hierarchical(result_graph_data_json,
-                                                   filter_small_nodes=filter_small_nodes,
-                                                   filter_min_relations=filter_min_relations,
-                                                   filter_big_to_small_edges=True,
-                                                   save_hierarchical_graph_data=False,
-                                                   save_hierarchical_textual_bullets=True)
+        This method creates 4 files:
+            * <result_file>_graph_data.json: a graph_data file that can be loaded to the key points graph-demo-site:
+            https://keypoint-matching-ui.ris2-debater-event.us-east.containers.appdomain.cloud/
+            It presents the relations between the key points as a graph of key points.
+            * <result_file>_hierarchical_graph_data.json: another graph_data file that can be loaded to the graph-demo-site.
+            This graph is simplified, it's more convenient to extract insights from it.
+            * <result_file>_hierarchical.txt: This textual file shows the simplified graph (from the previous bullet) as a list of hierarchical bullets.
+            * <result_file>_hierarchical.docx: This Microsoft Word document shows the textual bullets (from the previous bullet) as a user-friendly report.
+        '''
+        graph_data_full = KpAnalysisUtils.create_graph_data(result_file)  # creates graph_data
+        KpAnalysisUtils.save_graph_data(graph_data_full, result_file.replace('.csv', '_graph_data.json'))
+
+        graph_data_hierarchical = KpAnalysisUtils.graph_data_to_hierarchical_graph_data(graph_data=graph_data_full)
+        KpAnalysisUtils.save_graph_data(graph_data_hierarchical, result_file.replace('.csv', '_hierarchical_graph_data.json'))
+
+        if filter_min_relations_for_text > 0:
+            nodes = [d for d in graph_data_hierarchical if d['type'] == 'node']
+            edges = [d for d in graph_data_hierarchical if d['type'] == 'edge']
+            edges = [e for e in edges if float(e['data']['score']) >= 0.4]
+            graph_data_hierarchical = nodes + edges
+
+        KpAnalysisUtils.hierarchical_graph_data_to_textual_bullets(graph_data=graph_data_hierarchical, out_file=result_file.replace('.csv', '_hierarchical_bullets.txt'))
+        save_hierarchical_graph_data_to_docx(graph_data=graph_data_hierarchical, result_file=result_file, n_top_matches=n_top_matches_in_docx)
 
     @staticmethod
     def read_result_csv_into_result_json(result_file):
