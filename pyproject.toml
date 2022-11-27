@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "debater_python_api"
-version = "4.1.6"
+version = "4.1.7"
 description = "Project Debater Early Access Program API sdk for python"
 readme = "README.md"
 authors = [{ name = "Elad Venezian", email = "eladv@il.ibm.com" }]
@@ -16,14 +16,15 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-     "requests",
-     "prettytable",
-     "scikit-learn",
-     "matplotlib",
-     "numpy",
-     "pandas",
-     "spacy",
-     "PyHamcrest"
+    "requests",
+    "prettytable",
+    "scikit-learn",
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "spacy",
+    "PyHamcrest",
+    "python-docx"
 ]
 requires-python = ">=3.6"
 
