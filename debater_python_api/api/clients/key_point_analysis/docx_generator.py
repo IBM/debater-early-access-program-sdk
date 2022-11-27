@@ -1,3 +1,5 @@
+import logging
+
 import docx
 from docx.shared import Inches
 from docx import Document
@@ -131,7 +133,7 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
             records.append([d["sentence_text"], trunc_float(float(d["match_score"]), 4)])
 
         table = document.add_table(rows=1, cols=2)
-        table.style = 'TableGrid'
+        table.style = 'Table Grid'
         hdr_cells = table.rows[0].cells
         hdr_cells[0].text = 'Sentence Text'
         hdr_cells[0].width = Inches(5)
@@ -161,4 +163,6 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
                 msg = f'{kp} ({n_matches} matches, {id_to_n_matches_subtree[id]} in subtree)'
         add_link(paragraph=paragraph, link_to=f'temp{id}', text=msg, tool_tip="click to see top sentences")
 
-    document.save(result_file.replace('.csv', '_hierarchical.docx'))
+    out_file = result_file.replace('.csv', '_hierarchical.docx')
+    logging.info(f'saving docx summary in file: {out_file}')
+    document.save(out_file)
