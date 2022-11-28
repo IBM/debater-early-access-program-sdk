@@ -55,7 +55,7 @@ def set_n_matches_subtree(node_id, id_to_node, id_to_kids, id_to_n_matches_subtr
     id_to_n_matches_subtree[node_id] = subtree_n_matches
     return subtree_n_matches
 
-def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=None, sort_by_subtree=True):
+def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=None, sort_by_subtree=True, include_match_score=False):
     def get_hierarchical_bullets_aux(document, id_to_kids, id_to_node, id, tab, id_to_paragraph, id_to_n_matches_subtree, sort_by_subtree=True):
         bullet = '\u25E6' if tab % 2 == 1 else '\u2022'
         msg = f'{(" | " * tab)} {bullet} '
@@ -138,19 +138,24 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
         for d in matches_dicts:
             records.append([d["sentence_text"], trunc_float(float(d["match_score"]), 4)])
 
-        table = document.add_table(rows=1, cols=2)
+        if include_match_score:
+            table = document.add_table(rows=1, cols=2)
+        else:
+            table = document.add_table(rows=1, cols=1)
         table.style = 'Table Grid'
         hdr_cells = table.rows[0].cells
         hdr_cells[0].text = 'Sentence Text'
         hdr_cells[0].width = Inches(5)
-        hdr_cells[1].text = 'Match Score'
-        hdr_cells[1].width = Inches(0.5)
+        if include_match_score:
+            hdr_cells[1].text = 'Match Score'
+            hdr_cells[1].width = Inches(0.5)
         for r in records:
             row_cells = table.add_row().cells
             row_cells[0].text = r[0]
             row_cells[0].width = Inches(5)
-            row_cells[1].text = str(r[1])
-            row_cells[1].width = Inches(0.5)
+            if include_match_score:
+                row_cells[1].text = str(r[1])
+                row_cells[1].width = Inches(0.5)
 
     # add a bookmark to every paragraph
     for id, paragraph in id_to_paragraph2.items():
@@ -169,6 +174,6 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
                 msg = f'{kp} ({n_matches} matches, {id_to_n_matches_subtree[id]} in subtree)'
         add_link(paragraph=paragraph, link_to=f'temp{id}', text=msg, tool_tip="click to see top sentences")
 
-    out_file = result_file.replace('.csv', '_hierarchical.docx')
+    out_file = result_file.replace('.csv', '_hierarchical_no_score.docx')
     logging.info(f'saving docx summary in file: {out_file}')
     document.save(out_file)
