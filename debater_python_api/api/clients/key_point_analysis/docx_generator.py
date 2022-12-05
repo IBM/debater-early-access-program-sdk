@@ -124,7 +124,7 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
     kp_to_dicts = create_dict_to_list([(d['kp'], d) for d in dicts])
     stances = set([d['stance'] for d in dicts if 'stance' in d])
     stances = stances.union(set([d['selected_stance'] for d in dicts if 'selected_stance' in d]))
-    print(f'stances: {stances}')
+    # print(f'stances: {stances}')
     stance = None
     if len(stances) == 1 and 'pos' in stances:
         stance = 'pos'
@@ -234,6 +234,6 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
         msg = ' - back'
         add_link(paragraph=paragraph, link_to=f'hierarchy_bookmark{id}', text=msg, tool_tip="Click to view hierarchy", set_color=True)
 
-    out_file = result_file.replace('.csv', '_hierarchical_v2.docx')
+    out_file = result_file.replace('.csv', '_hierarchical.docx')
     logging.info(f'saving docx summary in file: {out_file}')
     document.save(out_file)
