@@ -234,8 +234,8 @@ class KpAnalysisClient(AbstractClient):
         :param comments_ids: (optional) a list of comment ids (a list of strings). When not provided, dummy comment_ids will be generated (1, 2, 3,...). When provided, comment_ids must be unique, must be the same length as comments_texts and the comment_id and comment_text should match by position in the list.
         :return: a json with the result
         '''
-        if len(comments_texts) > 1000:
-            raise Exception('Please use the stagged mode (upload_comments, start_kp_analysis_job) for jobs with more then 1000 comments')
+        if len(comments_texts) > 10000:
+            raise Exception('Please use the stagged mode (upload_comments, start_kp_analysis_job) for jobs with more then 10000 comments')
 
         if comments_ids is None:
             comments_ids = [str(i) for i in range(len(comments_texts))]

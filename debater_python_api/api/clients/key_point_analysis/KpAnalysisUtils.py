@@ -511,14 +511,15 @@ class KpAnalysisUtils:
 
     @staticmethod
     def generate_graphs_and_textual_summary(result_file, min_n_similar_matches_in_graph=5, n_top_matches_in_graph=20,
-                                            filter_min_relations_for_text=0.4, n_top_matches_in_docx=50, include_match_score=False):
+                                            filter_min_relations_for_text=0.4, n_top_matches_in_docx=50, include_match_score_in_docx=False, min_n_matches_in_docx=5):
         '''
         result_file: the ..._result.csv that is saved using write_result_to_csv method.
         min_n_similar_matches_in_graph: the minimal number of matches that match both key points when calculating the relation between them.
         n_top_matches_in_graph: number of top matches to add to the graph_data file.
         filter_min_relations_for_text: the minimal key points relation threshold, when creating the textual summaries.
         n_top_matches_in_docx: number of top matches to write in the textual summary (docx file). Pass None for all matches.
-        include_match_score: when set to true, the match score between the sentence and the key point is added.
+        include_match_score_in_docx: when set to true, the match score between the sentence and the key point is added.
+        min_n_matches_in_docx: remove key points with less than min_n_matches_in_docx matching sentences.
 
         This method creates 4 files:
             * <result_file>_graph_data.json: a graph_data file that can be loaded to the key points graph-demo-site:
@@ -544,7 +545,7 @@ class KpAnalysisUtils:
             graph_data_hierarchical = nodes + edges
 
         KpAnalysisUtils.hierarchical_graph_data_to_textual_bullets(graph_data=graph_data_hierarchical, out_file=result_file.replace('.csv', '_hierarchical_bullets.txt'))
-        save_hierarchical_graph_data_to_docx(graph_data=graph_data_hierarchical, result_file=result_file, n_top_matches=n_top_matches_in_docx, include_match_score=include_match_score)
+        save_hierarchical_graph_data_to_docx(graph_data=graph_data_hierarchical, result_file=result_file, n_top_matches=n_top_matches_in_docx, include_match_score=include_match_score_in_docx, min_n_matches=min_n_matches_in_docx)
 
     @staticmethod
     def read_result_csv_into_result_json(result_file):
