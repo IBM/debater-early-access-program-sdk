@@ -7,6 +7,28 @@ from docx import Document
 
 from debater_python_api.api.clients.key_point_analysis.utils import read_dicts_from_csv, create_dict_to_list, trunc_float
 
+from docx.oxml.shared import OxmlElement
+from docx.oxml.ns import qn
+
+def insertHR(paragraph):
+    p = paragraph._p  # p is the <w:p> XML element
+    pPr = p.get_or_add_pPr()
+    pBdr = OxmlElement('w:pBdr')
+    pPr.insert_element_before(pBdr,
+        'w:shd', 'w:tabs', 'w:suppressAutoHyphens', 'w:kinsoku', 'w:wordWrap',
+        'w:overflowPunct', 'w:topLinePunct', 'w:autoSpaceDE', 'w:autoSpaceDN',
+        'w:bidi', 'w:adjustRightInd', 'w:snapToGrid', 'w:spacing', 'w:ind',
+        'w:contextualSpacing', 'w:mirrorIndents', 'w:suppressOverlap', 'w:jc',
+        'w:textDirection', 'w:textAlignment', 'w:textboxTightWrap',
+        'w:outlineLvl', 'w:divId', 'w:cnfStyle', 'w:rPr', 'w:sectPr',
+        'w:pPrChange'
+    )
+    bottom = OxmlElement('w:bottom')
+    bottom.set(qn('w:val'), 'single')
+    bottom.set(qn('w:sz'), '6')
+    bottom.set(qn('w:space'), '1')
+    bottom.set(qn('w:color'), 'auto')
+    pBdr.append(bottom)
 
 def add_bookmark(paragraph, bookmark_text, bookmark_name):
     run = paragraph.add_run()
@@ -124,6 +146,7 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
     kp_to_dicts = create_dict_to_list([(d['kp'], d) for d in dicts])
     stances = set([d['stance'] for d in dicts if 'stance' in d])
     stances = stances.union(set([d['selected_stance'] for d in dicts if 'selected_stance' in d]))
+
     # print(f'stances: {stances}')
     stance = None
     if len(stances) == 1 and 'pos' in stances:
@@ -133,14 +156,24 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
         stance = 'neg'
 
 
-    title = 'Key Point Analysis Results'
-    if stance == 'pos':
-        title += '\nPositive Key Points'
-    if stance == 'neg':
-        title += '\nNegative Key Points'
-
-    heading = document.add_heading(title, 0)
+    heading = document.add_heading('Key Point Analysis Results', 1)
     set_heading(heading)
+
+    if stance == 'pos':
+        p = document.add_paragraph('Positive Key Points')
+        p.style = document.styles['Subtitle']
+        set_heading(p)
+        insertHR(p)
+    elif stance == 'neg':
+        p = document.add_paragraph('Negative Key Points')
+        p.style = document.styles['Subtitle']
+        set_heading(p)
+        insertHR(p)
+    else:
+        insertHR(heading)
+
+
+
     heading = document.add_heading('Key Point Hierarchy', 1)
     set_heading(heading)
 
@@ -167,10 +200,11 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
     id_to_paragraph2 = {}
     for id in ids_order:
         n = id_to_node[id]
-        p = document.add_paragraph()
-        id_to_paragraph2[id] = p
         kp = n["data"]["kp"]
-        p.add_run(f'\n\nKey point: {kp}  ({n["data"]["n_matches"]} matches)').bold = True
+
+        heading = document.add_heading(f'\nKey point: {kp}  ({n["data"]["n_matches"]} matches)', 2)
+        set_heading(heading)
+        id_to_paragraph2[id] = heading
 
         matches_dicts = kp_to_dicts[kp]
         if n_top_matches is not None and n_top_matches < len(kp_to_dicts[kp]):
@@ -182,16 +216,20 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
         for d in matches_dicts:
             records.append([d["sentence_text"], trunc_float(float(d["match_score"]), 4)])
 
+        with_header = False
+        if not with_header:
+            heading = document.add_heading(f'Matching Sentences', 3)
+            set_heading(heading)
+
         if include_match_score:
             table = document.add_table(rows=1, cols=2)
         else:
             table = document.add_table(rows=1, cols=1)
         table.style = 'Table Grid'
 
-        with_header = True
         if with_header:
             hdr_cells = table.rows[0].cells
-            hdr_cells[0].text = 'Sentence Text'
+            hdr_cells[0].text = 'Matching Sentences'
             hdr_cells[0].width = Inches(5)
             if include_match_score:
                 hdr_cells[1].text = 'Match Score'
