@@ -510,8 +510,13 @@ class KpAnalysisUtils:
 
 
     @staticmethod
-    def generate_graphs_and_textual_summary(result_file, min_n_similar_matches_in_graph=5, n_top_matches_in_graph=20,
-                                            filter_min_relations_for_text=0.4, n_top_matches_in_docx=50, include_match_score_in_docx=False, min_n_matches_in_docx=5):
+    def generate_graphs_and_textual_summary(result_file, min_n_similar_matches_in_graph=5,
+                                            n_top_matches_in_graph=20,
+                                            filter_min_relations_for_text=0.4,
+                                            n_top_matches_in_docx=50,
+                                            include_match_score_in_docx=False,
+                                            min_n_matches_in_docx=5,
+                                            save_only_docx=False):
         '''
         result_file: the ..._result.csv that is saved using write_result_to_csv method.
         min_n_similar_matches_in_graph: the minimal number of matches that match both key points when calculating the relation between them.
@@ -533,10 +538,12 @@ class KpAnalysisUtils:
         graph_data_full, results_dicts = KpAnalysisUtils.create_graph_data(result_file,
                                                             min_n_similar_matches=min_n_similar_matches_in_graph,
                                                             n_matches_samples=n_top_matches_in_graph)
-        KpAnalysisUtils.save_graph_data(graph_data_full, result_file.replace('.csv', '_graph_data.json'))
+        if not save_only_docx:
+            KpAnalysisUtils.save_graph_data(graph_data_full, result_file.replace('.csv', '_graph_data.json'))
 
         graph_data_hierarchical = KpAnalysisUtils.graph_data_to_hierarchical_graph_data(graph_data=graph_data_full)
-        KpAnalysisUtils.save_graph_data(graph_data_hierarchical, result_file.replace('.csv', '_hierarchical_graph_data.json'))
+        if not save_only_docx:
+            KpAnalysisUtils.save_graph_data(graph_data_hierarchical, result_file.replace('.csv', '_hierarchical_graph_data.json'))
 
         if filter_min_relations_for_text > 0:
             nodes = [d for d in graph_data_hierarchical if d['type'] == 'node']
@@ -544,7 +551,8 @@ class KpAnalysisUtils:
             edges = [e for e in edges if float(e['data']['score']) >= 0.4]
             graph_data_hierarchical = nodes + edges
 
-        KpAnalysisUtils.hierarchical_graph_data_to_textual_bullets(graph_data=graph_data_hierarchical, out_file=result_file.replace('.csv', '_hierarchical_bullets.txt'))
+        if not save_only_docx:
+            KpAnalysisUtils.hierarchical_graph_data_to_textual_bullets(graph_data=graph_data_hierarchical, out_file=result_file.replace('.csv', '_hierarchical_bullets.txt'))
         save_hierarchical_graph_data_to_docx(graph_data=graph_data_hierarchical, result_file=result_file, n_top_matches=n_top_matches_in_docx, include_match_score=include_match_score_in_docx, min_n_matches=min_n_matches_in_docx)
 
     @staticmethod

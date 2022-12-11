@@ -70,21 +70,23 @@ def add_link(paragraph, link_to, text, tool_tip=None, set_color=False):
     if set_color:
         r.font.color.rgb = RGBColor(0x40, 0x5E, 0x8D)
 
-def set_n_matches_subtree(node_id, id_to_node, id_to_kids, id_to_n_matches_subtree):
-    subtree_n_matches = int(id_to_node[node_id]['data']['n_matches'])
-
-    if node_id in id_to_kids:
-        for kid in id_to_kids[node_id]:
-            subtree_n_matches += set_n_matches_subtree(kid, id_to_node, id_to_kids, id_to_n_matches_subtree)
-    id_to_n_matches_subtree[node_id] = subtree_n_matches
-    return subtree_n_matches
-
-
 def set_heading(heading):
     paragraph_format = heading.paragraph_format
     paragraph_format.page_break_before = False
     paragraph_format.keep_with_next = False
     paragraph_format.keep_together = False
+
+
+def get_unique_matches_subtree(node_id, id_to_node, id_to_kids, id_to_n_unique_matches_subtree, kp_to_dicts):
+    kp = id_to_node[node_id]['data']['kp']
+    kp_unique_sentences = set([d['comment_id'] + '_' + d['sentence_id'] for d in kp_to_dicts[kp]])
+
+    if node_id in id_to_kids:
+        for kid in id_to_kids[node_id]:
+            kp_unique_sentences = kp_unique_sentences.union(get_unique_matches_subtree(kid, id_to_node, id_to_kids, id_to_n_unique_matches_subtree, kp_to_dicts))
+    id_to_n_unique_matches_subtree[node_id] = len(kp_unique_sentences)
+    return kp_unique_sentences
+
 
 def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=None, sort_by_subtree=True, include_match_score=False, min_n_matches=5):
     def get_hierarchical_bullets_aux(document, id_to_kids, id_to_node, id, tab, id_to_paragraph, id_to_n_matches_subtree, sort_by_subtree=True, ids_order=[]):
@@ -134,20 +136,20 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
 
     root_ids = set(nodes_ids).difference(all_kids)
 
-    id_to_n_matches_subtree = {}
-    for root in root_ids:
-        set_n_matches_subtree(root, id_to_node, id_to_kids, id_to_n_matches_subtree)
-
     document = Document()
     style = document.styles['Normal']
     style.font.name = 'Calibri'
 
     dicts, _ = read_dicts_from_csv(result_file)
     kp_to_dicts = create_dict_to_list([(d['kp'], d) for d in dicts])
+
+    id_to_n_matches_subtree = {}
+    for root in root_ids:
+        get_unique_matches_subtree(root, id_to_node, id_to_kids, id_to_n_matches_subtree, kp_to_dicts)
+
     stances = set([d['stance'] for d in dicts if 'stance' in d])
     stances = stances.union(set([d['selected_stance'] for d in dicts if 'selected_stance' in d]))
 
-    # print(f'stances: {stances}')
     stance = None
     if len(stances) == 1 and 'pos' in stances:
         stance = 'pos'
@@ -216,10 +218,8 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
         for d in matches_dicts:
             records.append([d["sentence_text"], trunc_float(float(d["match_score"]), 4)])
 
-        with_header = False
-        if not with_header:
-            heading = document.add_heading(f'Matching Sentences', 3)
-            set_heading(heading)
+        heading = document.add_heading(f'Matching Sentences', 3)
+        set_heading(heading)
 
         if include_match_score:
             table = document.add_table(rows=1, cols=2)
@@ -227,15 +227,8 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
             table = document.add_table(rows=1, cols=1)
         table.style = 'Table Grid'
 
-        if with_header:
-            hdr_cells = table.rows[0].cells
-            hdr_cells[0].text = 'Matching Sentences'
-            hdr_cells[0].width = Inches(5)
-            if include_match_score:
-                hdr_cells[1].text = 'Match Score'
-                hdr_cells[1].width = Inches(0.5)
 
-        start = True if not with_header else False
+        start = True
         for r in records:
             if start:
                 row_cells = table.rows[0].cells
