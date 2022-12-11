@@ -253,7 +253,7 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
             msg = f'{kp} ({n_matches} matches)'
         else:
             if sort_by_subtree:
-                msg = f'{kp} ({id_to_n_matches_subtree[id]} matches in subtree, {n_matches} matches)'
+                msg = f'{kp} ({id_to_n_matches_subtree[id]} matching sentences in subtree, {n_matches} matches)'
             else:
                 msg = f'{kp} ({n_matches} matches, {id_to_n_matches_subtree[id]} in subtree)'
         add_link(paragraph=paragraph, link_to=f'table_bookmark{id}', text=msg, tool_tip="Click to view top matching sentences")
