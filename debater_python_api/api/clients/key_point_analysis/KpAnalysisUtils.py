@@ -548,12 +548,116 @@ class KpAnalysisUtils:
         if filter_min_relations_for_text > 0:
             nodes = [d for d in graph_data_hierarchical if d['type'] == 'node']
             edges = [d for d in graph_data_hierarchical if d['type'] == 'edge']
-            edges = [e for e in edges if float(e['data']['score']) >= 0.4]
+            edges = [e for e in edges if float(e['data']['score']) >= filter_min_relations_for_text]
             graph_data_hierarchical = nodes + edges
 
         if not save_only_docx:
             KpAnalysisUtils.hierarchical_graph_data_to_textual_bullets(graph_data=graph_data_hierarchical, out_file=result_file.replace('.csv', '_hierarchical_bullets.txt'))
         save_hierarchical_graph_data_to_docx(graph_data=graph_data_hierarchical, result_file=result_file, n_top_matches=n_top_matches_in_docx, include_match_score=include_match_score_in_docx, min_n_matches=min_n_matches_in_docx)
+
+    @staticmethod
+    def get_hierarchical_graph_from_tree_and_subset_results(graph_data_hierarchical, results_file,
+                                                            filter_min_relations_for_text=0.4,
+                                                            n_top_matches_in_graph=20):
+        results_df = pd.read_csv(results_file)
+        n_sentences = len(set(results_df["sentence_text"]))
+        results_kps = [kp for kp in set(results_df["kp"]) if kp != "none"]
+
+        nodes = [d for d in graph_data_hierarchical if d['type'] == 'node']
+        edges = [d for d in graph_data_hierarchical if d['type'] == 'edge']
+        if filter_min_relations_for_text > 0:
+           edges = [e for e in edges if float(e['data']['score']) >= filter_min_relations_for_text]
+
+        # change graph nodes to match new results:
+        n_kps_in_new_only = len(set(results_kps).difference(set(n["data"]['kp'] for n in nodes)))
+        if n_kps_in_new_only > 0:  # no new kps in results
+            logging.warning(
+                f"New result file contains {n_kps_in_new_only} key points not in the graph data. Not creating summaries.")
+            return None
+
+        results_df = results_df[results_df["kp"] != "none"]
+        kp_to_results = {k: v for k, v in results_df.groupby(["kp"])}
+
+        new_nodes = []
+        for node in nodes:
+            node_kp = node["data"]["kp"]
+            kp_results = kp_to_results.get(node_kp, pd.DataFrame([], columns=results_df.columns))
+            n_matches = len(kp_results)
+            sentences_text = list(kp_results["sentence_text"])
+            scores = list(kp_results["match_score"])
+
+            n_graph_matches = np.min([n_matches, n_top_matches_in_graph])
+            matches = [{"sentence_text": sentences_text[i], "match_score": scores[i]} for i in range(n_graph_matches)]
+            rel_val = float(n_matches) / float(n_sentences) if n_sentences else 0
+            new_node = {"type": "node", "data": {"id": node["data"]["id"], "kp": node_kp, "n_matches": n_matches,
+                                                 "n_sentences": n_sentences,
+                                                 "relative_val": rel_val, "matches": matches}}
+            new_nodes.append(new_node)
+
+        # filter nodes with no matches
+        removed_idxs = []
+        for node in new_nodes:
+            if node["data"]["n_matches"] == 0:
+                id = node["data"]["id"]
+
+                # edges: specific -> general
+                sub_kps = [e["data"]["source"] for e in edges if e["data"]["target"] == id]
+                top_kps = [e["data"]["target"] for e in edges if e["data"]["source"] == id]
+                # assert len(top_kps) <= 1
+                top_kp = top_kps[0] if len(top_kps) == 1 else None
+
+                edges = list(filter(lambda e: id != e["data"]["source"] and id != e["data"]["target"], edges))
+                if top_kp:  # connect top and sub kps
+                    edges.extend(
+                        [{"type": "edge", "data": {"source": sub_kp, "target": top_kp, "score": -1}} for sub_kp in
+                         sub_kps])
+                removed_idxs.append(id)
+
+
+        # squeeze nodes indices
+        new_nodes = [n for n in new_nodes if n["data"]["id"] not in removed_idxs]
+        remaining_idxs = [node["data"]["id"] for node in new_nodes]
+        new_idxs = list(range(len(remaining_idxs)))
+        old_to_new_idx = dict(zip(remaining_idxs, new_idxs))
+        for node in new_nodes:
+            node["data"]["id"] = old_to_new_idx[node["data"]["id"]]
+        for e in edges:
+            e["data"]["source"] = old_to_new_idx[e["data"]["source"]]
+            e["data"]["target"] = old_to_new_idx[e["data"]["target"]]
+            e["data"]["score"] = -1
+
+        new_hierarchical_graph_data = new_nodes + edges
+        return new_hierarchical_graph_data
+
+    @staticmethod
+    def generate_graphs_and_textual_summary_for_given_tree(hierarchical_data_file, results_file, file_suff = "_from_full",
+                                                           n_top_matches_in_graph=20,
+                                                           filter_min_relations_for_text=0.4,
+                                                           n_top_matches_in_docx=50,
+                                                           include_match_score_in_docx=False,
+                                                           min_n_matches_in_docx=5,
+                                                           save_only_docx=False):
+
+        with open (hierarchical_data_file, "r") as f:
+            graph_data_hierarchical = json.load(f)
+
+        new_hierarchical_graph_data = KpAnalysisUtils.get_hierarchical_graph_from_tree_and_subset_results(graph_data_hierarchical,
+                                                    results_file, filter_min_relations_for_text, n_top_matches_in_graph)
+
+        if not new_hierarchical_graph_data:
+            return
+
+        if not save_only_docx:
+            new_hierarchical_graph_file = results_file.replace(".csv", f"{file_suff}_hierarchical_graph_data.json")
+            KpAnalysisUtils.save_graph_data(new_hierarchical_graph_data, new_hierarchical_graph_file)
+            bullets_file = new_hierarchical_graph_file.replace('_graph_data.json', '_bullets.txt')
+            KpAnalysisUtils.hierarchical_graph_data_to_textual_bullets(graph_data=new_hierarchical_graph_data,
+                                                                           out_file=bullets_file)
+
+        save_hierarchical_graph_data_to_docx(graph_data=new_hierarchical_graph_data, result_file=results_file,
+                                             n_top_matches=n_top_matches_in_docx,
+                                             include_match_score=include_match_score_in_docx,
+                                             min_n_matches=min_n_matches_in_docx, file_suff = file_suff)
 
     @staticmethod
     def read_result_csv_into_result_json(result_file):

@@ -88,7 +88,7 @@ def get_unique_matches_subtree(node_id, id_to_node, id_to_kids, id_to_n_unique_m
     return kp_unique_sentences
 
 
-def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=None, sort_by_subtree=True, include_match_score=False, min_n_matches=5):
+def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=None, sort_by_subtree=True, include_match_score=False, min_n_matches=5, file_suff=""):
     def get_hierarchical_bullets_aux(document, id_to_kids, id_to_node, id, tab, id_to_paragraph, id_to_n_matches_subtree, sort_by_subtree=True, ids_order=[]):
         bullet = '\u25E6' if tab % 2 == 1 else '\u2022'
         msg = f'{("   " * tab)} {bullet} '
@@ -265,6 +265,6 @@ def save_hierarchical_graph_data_to_docx(graph_data, result_file, n_top_matches=
         msg = ' - back'
         add_link(paragraph=paragraph, link_to=f'hierarchy_bookmark{id}', text=msg, tool_tip="Click to view hierarchy", set_color=True)
 
-    out_file = result_file.replace('.csv', '_hierarchical.docx')
+    out_file = result_file.replace('.csv', f'{file_suff}_hierarchical.docx')
     logging.info(f'saving docx summary in file: {out_file}')
     document.save(out_file)
