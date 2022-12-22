@@ -275,6 +275,87 @@ class KpAnalysisUtils:
         return comparison_df
 
     @staticmethod
+    def print_result(result, n_sentences_per_kp, title):
+        '''
+        Prints the key point analysis result to console.
+        :param result: the result, returned by method get_result in KpAnalysisTaskFuture.
+        '''
+        def split_sentence_to_lines(sentence, max_len=90):
+            if len(sentence) <= max_len:
+                return ['- ' + sentence]
+
+            lines = []
+            line = None
+            tokens = sentence.split(' ')
+            for token in tokens:
+                if line is None:
+                    line = '- ' + token
+                else:
+                    if len(line + ' ' + token) <= max_len:
+                        line += ' ' + token
+                    else:
+                        lines.append(line)
+                        line = '  ' + token
+            if line is not None:
+                lines.append(line)
+            return lines
+
+        def split_sentences_to_lines(sentences, n_tabs):
+            lines = []
+            for sentence in sentences:
+                lines.extend(split_sentence_to_lines(sentence))
+            return [('\t' * n_tabs) + line for line in lines]
+
+        def print_kp(kp, stance, n_matches, n_matches_subtree, depth, keypoint_matching, n_sentences_per_kp):
+            has_n_matches_subtree = n_matches_subtree is not None
+            print('%s%d%s - %s%s' % (('\t' * depth), n_matches_subtree if has_n_matches_subtree else n_matches,
+                                     (' - %d' % n_matches) if has_n_matches_subtree else '', kp,
+                                     '' if stance is None else ' - ' + stance))
+            sentences = [match['sentence_text'] for match in keypoint_matching['matching']]
+            sentences = sentences[1:(n_sentences_per_kp + 1)]  # first sentence is the kp itself
+            lines = split_sentences_to_lines(sentences, depth)
+            for line in lines:
+                print('\t%s' % line)
+
+        kp_to_n_matches_subtree = defaultdict(int)
+        parents = list()
+        parent_to_kids = defaultdict(list)
+        for keypoint_matching in result['keypoint_matchings']:
+            kp = keypoint_matching['keypoint']
+            kp_to_n_matches_subtree[kp] += len(keypoint_matching['matching'])
+            parent = keypoint_matching.get("parent", None)
+            if parent is None or parent == 'root':
+                parents.append(keypoint_matching)
+            else:
+                parent_to_kids[parent].append(keypoint_matching)
+                kp_to_n_matches_subtree[parent] += len(keypoint_matching['matching'])
+
+        parents.sort(key=lambda x: kp_to_n_matches_subtree[x['keypoint']], reverse=True)
+
+        total_sentences = 0
+        matched_sentences = 0
+        for i, keypoint_matching in enumerate(result['keypoint_matchings']):
+            matches = keypoint_matching['matching']
+            total_sentences += len(matches)
+            if keypoint_matching['keypoint'] != 'none':  # skip cluster of all unmatched sentences
+                matched_sentences += len(matches)
+
+        print(title + ' coverage: %.2f' % ((float(matched_sentences) / float(total_sentences)) * 100.0))
+        print(title + ' key points:')
+        for parent in parents:
+            kp = parent['keypoint']
+            stance = None if 'stance' not in parent else parent['stance']
+            if kp == 'none':
+                continue
+            print_kp(kp, stance, len(parent['matching']),
+                     None if len(parent_to_kids[kp]) == 0 else kp_to_n_matches_subtree[kp], 0, parent,
+                     n_sentences_per_kp)
+            for kid in parent_to_kids[kp]:
+                kid_kp = kid['keypoint']
+                kid_stance = None if 'stance' not in kid else kid['stance']
+                print_kp(kid_kp, kid_stance, len(kid['matching']), None, 1, kid, n_sentences_per_kp)
+
+    @staticmethod
     def write_sentences_to_csv(sentences, out_file):
         def get_selected_stance(r):
             stance_dict = dict(r["stance_dict"])
