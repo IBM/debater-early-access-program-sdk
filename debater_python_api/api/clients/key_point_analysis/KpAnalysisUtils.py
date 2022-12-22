@@ -231,7 +231,7 @@ class KpAnalysisUtils:
             write_df_to_file(summary_df, summary_file)
 
         if result_df is not None:
-            write_df_to_file(result_df, result_file.replace(".csv", "_kpa_result.csv"))
+            write_df_to_file(result_df, result_file)
 
     @staticmethod
     def compare_results(result_1, result_2, title_1='result1', title_2='result2'):
