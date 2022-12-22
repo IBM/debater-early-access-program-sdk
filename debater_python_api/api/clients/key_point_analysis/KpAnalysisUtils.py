@@ -626,8 +626,7 @@ class KpAnalysisUtils:
             e["data"]["target"] = old_to_new_idx[e["data"]["target"]]
             e["data"]["score"] = -1
 
-        new_hierarchical_graph_data = new_nodes + edges
-        return new_hierarchical_graph_data
+        return new_nodes + edges
 
     @staticmethod
     def generate_graphs_and_textual_summary_for_given_tree(hierarchical_data_file, results_file, file_suff = "_from_full",
@@ -657,7 +656,7 @@ class KpAnalysisUtils:
         save_hierarchical_graph_data_to_docx(graph_data=new_hierarchical_graph_data, result_file=results_file,
                                              n_top_matches=n_top_matches_in_docx,
                                              include_match_score=include_match_score_in_docx,
-                                             min_n_matches=min_n_matches_in_docx, file_suff = file_suff)
+                                             min_n_matches=min_n_matches_in_docx, file_suff=file_suff)
 
     @staticmethod
     def read_result_csv_into_result_json(result_file):

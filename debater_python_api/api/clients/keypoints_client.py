@@ -31,17 +31,20 @@ class KpAnalysisClient(AbstractClient):
         AbstractClient.__init__(self, apikey)
         self.host = host if host is not None else 'https://keypoint-matching-backend.debater.res.ibm.com'
 
-    def _delete(self, url, params, use_cache=True, timeout=300, retries=10):
-        return self._run_request_with_retry(requests.delete, url, params, use_cache, timeout, retries)
+    def _delete(self, url, params, use_cache=True, timeout=300, retries=10, headers=None):
+        return self._run_request_with_retry(requests.delete, url, params, use_cache, timeout, retries, headers)
 
-    def _get(self, url, params, use_cache=True, timeout=300, retries=10):
-        return self._run_request_with_retry(requests.get, url, params, use_cache, timeout, retries)
+    def _get(self, url, params, use_cache=True, timeout=300, retries=10, headers=None):
+        return self._run_request_with_retry(requests.get, url, params, use_cache, timeout, retries, headers)
 
-    def _post(self, url, body, use_cache=True, timeout=300, retries=10):
-        return self._run_request_with_retry(requests.post, url, body, use_cache, timeout, retries)
+    def _post(self, url, body, use_cache=True, timeout=300, retries=10, headers=None):
+        return self._run_request_with_retry(requests.post, url, body, use_cache, timeout, retries, headers)
 
-    def _run_request_with_retry(self, func, url, params, use_cache=True, timeout=20, retries=10):
+    def _run_request_with_retry(self, func, url, params, use_cache=True, timeout=20, retries=10, headers_input=None):
         headers = get_default_request_header(self.apikey)
+        if headers_input is not None:
+            headers.update(headers_input)
+
         logging.info('client calls service (%s): %s' % (func.__name__, url))
         if not use_cache:
             headers['cache-control'] = 'no-cache'
