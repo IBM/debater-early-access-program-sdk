@@ -1,4 +1,3 @@
-import ast
 import json
 import logging
 import math
@@ -7,54 +6,14 @@ import pandas as pd
 import numpy as np
 
 from debater_python_api.api.clients.key_point_analysis.KpaExceptions import KpaIllegalInputException
+from debater_python_api.api.clients.key_point_analysis.KpaResult import KpaResult
 from debater_python_api.api.clients.key_point_analysis.docx_generator import save_hierarchical_graph_data_to_docx
-from debater_python_api.api.clients.key_point_analysis.utils import read_dicts_from_csv
-from debater_python_api.utils.kp_analysis_utils import create_dict_to_list, write_df_to_file
-
+from debater_python_api.api.clients.key_point_analysis.utils import create_dict_to_list, read_dicts_from_df
 
 class KpAnalysisUtils:
     '''
     A class with static methods for utilities that assist with the key point analysis service.
     '''
-
-    @staticmethod
-    def print_result(result, print_matches=False):
-        '''
-        Prints the key point analysis result to console.
-        :param result: the result, returned by method get_result in KpAnalysisTaskFuture.
-        '''
-        def print_kp(kp, n_matches, n_matches_subtree, depth, print_matches, keypoint_matching):
-            spaces = '     ' * depth
-            has_n_matches_subtree = n_matches_subtree is not None
-            logging.info('%s    %d%s - %s' % (spaces, n_matches_subtree if has_n_matches_subtree else n_matches,
-                                       (' - %d' % n_matches) if has_n_matches_subtree else '', kp))
-            if print_matches:
-                for match in keypoint_matching['matching']:
-                    logging.info('%s    %s - %s' % (spaces + '    ', str(match['score']), match['sentence_text']))
-
-        kp_to_n_matches_subtree = defaultdict(int)
-        parents = list()
-        parent_to_kids = defaultdict(list)
-        for keypoint_matching in result['keypoint_matchings']:
-            kp = keypoint_matching['keypoint']
-            kp_to_n_matches_subtree[kp] += len(keypoint_matching['matching'])
-            parent = keypoint_matching.get("parent", None)
-            if parent is None or parent == 'root':
-                parents.append(keypoint_matching)
-            else:
-                parent_to_kids[parent].append(keypoint_matching)
-                kp_to_n_matches_subtree[parent] += len(keypoint_matching['matching'])
-
-        parents.sort(key=lambda x: kp_to_n_matches_subtree[x['keypoint']], reverse=True)
-
-        logging.info('Result:')
-        for parent in parents:
-            kp = parent['keypoint']
-            print_kp(kp, len(parent['matching']), None if len(parent_to_kids[kp]) == 0 else kp_to_n_matches_subtree[kp], 0, print_matches, parent)
-            for kid in parent_to_kids[kp]:
-                kid_kp = kid['keypoint']
-                print_kp(kid_kp, len(kid['matching']), None, 1, print_matches, kid)
-
     @staticmethod
     def print_report(user_report):
         '''
@@ -90,120 +49,7 @@ class KpAnalysisUtils:
         return result
 
     @staticmethod
-    def summarize_result_to_dataframes(result):
-        if 'keypoint_matchings' not in result:
-            logging.info("No keypoint matchings results")
-            return None, None
-
-        all_sentences_ids = set([m['comment_id'] + "_" + str(m['sentence_id'])
-                                 for keypoint_matching in result['keypoint_matchings'] for m in
-                                 keypoint_matching['matching']])
-        total_sentences = len(all_sentences_ids)
-
-        all_comment_ids = set([m["comment_id"] for keypoint_matching in result['keypoint_matchings'] for m in
-                               keypoint_matching['matching']])
-        total_comments = len(all_comment_ids)
-        all_mapped_comment_ids = set([m["comment_id"] for keypoint_matching in result['keypoint_matchings'] if
-                                      keypoint_matching['keypoint'] != 'none' for m in keypoint_matching['matching']])
-
-        total_unmapped_comments = total_comments - len(all_mapped_comment_ids)
-
-        summary_rows = []
-        matchings_rows = []
-        kps_have_stance = False
-        sentences_have_stance = False
-        stance_keys = []
-        for keypoint_matching in result['keypoint_matchings']:
-            kp = keypoint_matching['keypoint']
-            kp_stance = keypoint_matching.get('stance', None)
-            n_sentences = len(keypoint_matching['matching'])
-            sentence_coverage = n_sentences / total_sentences if total_sentences > 0 else 0.0
-            if kp == "none":
-                n_comments = total_unmapped_comments
-            else:
-                n_comments = len(set([m["comment_id"] for m in keypoint_matching['matching']]))
-            comments_coverage = n_comments / total_comments if total_comments > 0 else 0.0
-
-            summary_row = [kp, n_sentences, sentence_coverage, n_comments, comments_coverage]
-            if kp_stance is not None:
-                kps_have_stance = True
-            if kps_have_stance:
-                summary_row.append(kp_stance if kp_stance else "")
-
-            kp_scores = [0, 0, 0]
-            for match in keypoint_matching['matching']:
-                match_row = [kp, match["sentence_text"], match["score"], match["comment_id"], match["sentence_id"],
-                             match["sents_in_comment"], match["span_start"], match["span_end"], match["num_tokens"],
-                             match["argument_quality"], match.get("kp_quality", 0)]
-
-                if match["sentence_text"] == kp:
-                    kp_q = match.get("kp_quality", 0)
-                    kp_scores = [match["num_tokens"], match["argument_quality"], kp_q]
-
-                if 'stance' in match:
-                    stance_dict = match['stance']
-                    # match_row.append(str(stance_dict))
-                    stance_tups = list(stance_dict.items())
-                    stance_keys = [t[0] for t in stance_tups]
-                    stance_scores = [float(t[1]) for t in stance_tups]
-                    match_row.extend(stance_scores)
-                    stance_conf = np.max(stance_scores)
-                    selected_stance = stance_keys[np.argmax(stance_scores)]
-                    match_row.extend([selected_stance, stance_conf])
-                    sentences_have_stance = True
-                if kp_stance is not None:
-                    match_row.append(kp_stance)
-                matchings_rows.append(match_row)
-
-            summary_row.extend(kp_scores)
-            summary_rows.append(summary_row)
-
-        matchings_cols = ["kp", "sentence_text", "match_score", 'comment_id', 'sentence_id', 'sents_in_comment',
-                          'span_start', 'span_end', 'num_tokens', 'argument_quality', 'kp_quality']
-
-        if sentences_have_stance:
-            # matchings_cols.extend(['stance'] + [f'{k}_score' for k in stance_keys] + ["selected_stance", "stance_conf"])
-            matchings_cols.extend([f'{k}_score' for k in stance_keys] + ["selected_stance", "stance_conf"])
-        if kps_have_stance:
-            matchings_cols.append('kp_stance')
-
-        result_df = pd.DataFrame(matchings_rows, columns=matchings_cols)
-
-        summary_rows = sorted(summary_rows, key=lambda x: x[1], reverse=True)
-        summary_cols = ["kp", "#sentences", 'sentences_coverage', '#comments', 'comments_coverage']
-        if kps_have_stance:
-            summary_cols.append('stance')
-        summary_cols.extend(["num_tokens", "argument_quality", "kp_quality"])
-        summary_df = pd.DataFrame(summary_rows, columns=summary_cols)
-        return result_df, summary_df
-
-    @staticmethod
-    def update_dataframes_with_hierarchical_results(result, summary_df):
-        '''
-        Updates the summary_df with a summary of the hierarchical data
-        and returns the hierarchy_df dataframe with more elaborated hierarchical results.
-        '''
-        hierarchy_df = None
-        kp_to_parent = {km['keypoint']: km.get("parent", 'root') for km in result['keypoint_matchings']}
-        if len(set(kp_to_parent.values())) > 1:
-            summary_df.loc[:, "parent"] = summary_df.apply(lambda x: kp_to_parent[x["kp"]], axis=1)
-            parent_to_kps = {p: list(filter(lambda x: kp_to_parent[x] == p, kp_to_parent.keys()))
-                             for p in set(kp_to_parent.values())}
-            parent_to_kps.update({p: [] for p in set(parent_to_kps["root"]).difference(parent_to_kps.keys())})
-            kp_to_n_args = dict(zip(summary_df["kp"], summary_df["#sentences"]))
-            kp_to_n_args_sub = {kp: np.sum([kp_to_n_args[c_kp] for c_kp in set(parent_to_kps.get(kp, []) + [kp])])
-                                for kp in kp_to_parent}
-            kp_to_n_args_sub["root"] = np.sum(list(summary_df["#sentences"]))
-            summary_df.loc[:, "#sents_in_subtree"] = summary_df.apply(lambda x: kp_to_n_args_sub[x["kp"]], axis=1)
-
-            hierarchy_data = [[p, len(parent_to_kps[p]), kp_to_n_args_sub[p], parent_to_kps[p]] for p in parent_to_kps]
-            hierarchy_df = pd.DataFrame(hierarchy_data,
-                                        columns=["top_kp", "#level_2_kps", "#sents_in_subtree", "level_2_kps"])
-            hierarchy_df.sort_values(by=["#sents_in_subtree"], ascending=False, inplace=True)
-        return summary_df, hierarchy_df
-
-    @staticmethod
-    def write_result_to_csv(result, result_file, also_hierarchy=True):
+    def write_result_to_csv(result_json, result_file, also_hierarchy=True):
         '''
         Writes the key point analysis result to file.
         Creates two files:
@@ -212,26 +58,12 @@ class KpAnalysisUtils:
         :param result: the result, returned by method get_result in KpAnalysisTaskFuture.
         :param result_file: a path to the file that will be created (should have a .csv suffix, otherwise it will be added).
         '''
-        if 'keypoint_matchings' not in result:
+        if 'keypoint_matchings' not in result_json:
             logging.info("No keypoint matchings results")
             return
 
-        if '.csv' not in result_file:
-            result_file += '.csv'
-
-        result_df, summary_df = KpAnalysisUtils.summarize_result_to_dataframes(result)
-        if also_hierarchy:
-            summary_df, hierarchy_df = KpAnalysisUtils.update_dataframes_with_hierarchical_results(result, summary_df)
-            if hierarchy_df is not None:
-                hierarchy_file = result_file.replace(".csv", "_kps_hierarchy.csv")
-                write_df_to_file(hierarchy_df, hierarchy_file)
-
-        if summary_df is not None:
-            summary_file = result_file.replace(".csv", "_kps_summary.csv")
-            write_df_to_file(summary_df, summary_file)
-
-        if result_df is not None:
-            write_df_to_file(result_df, result_file)
+        kpa_result = KpaResult.create_from_result_json(result_json)
+        kpa_result.write_to_file(result_file, also_hierarchy)
 
     @staticmethod
     def compare_results(result_1, result_2, title_1='result1', title_2='result2'):
@@ -275,85 +107,9 @@ class KpAnalysisUtils:
         return comparison_df
 
     @staticmethod
-    def print_result(result, n_sentences_per_kp, title):
-        '''
-        Prints the key point analysis result to console.
-        :param result: the result, returned by method get_result in KpAnalysisTaskFuture.
-        '''
-        def split_sentence_to_lines(sentence, max_len=90):
-            if len(sentence) <= max_len:
-                return ['- ' + sentence]
-
-            lines = []
-            line = None
-            tokens = sentence.split(' ')
-            for token in tokens:
-                if line is None:
-                    line = '- ' + token
-                else:
-                    if len(line + ' ' + token) <= max_len:
-                        line += ' ' + token
-                    else:
-                        lines.append(line)
-                        line = '  ' + token
-            if line is not None:
-                lines.append(line)
-            return lines
-
-        def split_sentences_to_lines(sentences, n_tabs):
-            lines = []
-            for sentence in sentences:
-                lines.extend(split_sentence_to_lines(sentence))
-            return [('\t' * n_tabs) + line for line in lines]
-
-        def print_kp(kp, stance, n_matches, n_matches_subtree, depth, keypoint_matching, n_sentences_per_kp):
-            has_n_matches_subtree = n_matches_subtree is not None
-            print('%s%d%s - %s%s' % (('\t' * depth), n_matches_subtree if has_n_matches_subtree else n_matches,
-                                     (' - %d' % n_matches) if has_n_matches_subtree else '', kp,
-                                     '' if stance is None else ' - ' + stance))
-            sentences = [match['sentence_text'] for match in keypoint_matching['matching']]
-            sentences = sentences[1:(n_sentences_per_kp + 1)]  # first sentence is the kp itself
-            lines = split_sentences_to_lines(sentences, depth)
-            for line in lines:
-                print('\t%s' % line)
-
-        kp_to_n_matches_subtree = defaultdict(int)
-        parents = list()
-        parent_to_kids = defaultdict(list)
-        for keypoint_matching in result['keypoint_matchings']:
-            kp = keypoint_matching['keypoint']
-            kp_to_n_matches_subtree[kp] += len(keypoint_matching['matching'])
-            parent = keypoint_matching.get("parent", None)
-            if parent is None or parent == 'root':
-                parents.append(keypoint_matching)
-            else:
-                parent_to_kids[parent].append(keypoint_matching)
-                kp_to_n_matches_subtree[parent] += len(keypoint_matching['matching'])
-
-        parents.sort(key=lambda x: kp_to_n_matches_subtree[x['keypoint']], reverse=True)
-
-        total_sentences = 0
-        matched_sentences = 0
-        for i, keypoint_matching in enumerate(result['keypoint_matchings']):
-            matches = keypoint_matching['matching']
-            total_sentences += len(matches)
-            if keypoint_matching['keypoint'] != 'none':  # skip cluster of all unmatched sentences
-                matched_sentences += len(matches)
-
-        print(title + ' coverage: %.2f' % ((float(matched_sentences) / float(total_sentences)) * 100.0))
-        print(title + ' key points:')
-        for parent in parents:
-            kp = parent['keypoint']
-            stance = None if 'stance' not in parent else parent['stance']
-            if kp == 'none':
-                continue
-            print_kp(kp, stance, len(parent['matching']),
-                     None if len(parent_to_kids[kp]) == 0 else kp_to_n_matches_subtree[kp], 0, parent,
-                     n_sentences_per_kp)
-            for kid in parent_to_kids[kp]:
-                kid_kp = kid['keypoint']
-                kid_stance = None if 'stance' not in kid else kid['stance']
-                print_kp(kid_kp, kid_stance, len(kid['matching']), None, 1, kid, n_sentences_per_kp)
+    def print_result(result_json, n_sentences_per_kp, title):
+        KpaResult.create_from_result_json(result_json).print_result(n_sentences_per_kp=n_sentences_per_kp,
+                                                                    title=title)
 
     @staticmethod
     def write_sentences_to_csv(sentences, out_file):
@@ -413,10 +169,10 @@ class KpAnalysisUtils:
             logging.info(f'domain: {domain} doesn\'t exist.')
 
     @staticmethod
-    def create_graph_data(result_file, min_n_similar_matches=5, n_matches_samples=20):
+    def create_graph_data(kpa_result: KpaResult, min_n_similar_matches=5, n_matches_samples=20):
         '''
         translates the result file (full result, not the summary) into a json that is loadable in the kpa-key-points-graph-ui
-        :param result_file: full results file (with sentence to keypoint mappings).
+        :param kpa_result: a KpaResult instance
         :param min_n_similar_matches: minimal number of sentences in the key points intersection for creating an edge (relation between the key points).
         :return: creates a new json file (located near result_file with a new suffix).
         '''
@@ -458,11 +214,8 @@ class KpAnalysisUtils:
                                 for d in kp_to_dicts[kp][:n_matches_samples]]
                     }
 
-        logging.info(f'Creating key points graph data-file for results file: {result_file}')
-        dicts, _ = read_dicts_from_csv(result_file)
-
+        dicts, _ = read_dicts_from_df(kpa_result.result_df)
         n_sentences = len(set([d['sentence_text'] for d in dicts]))
-
         kp_to_dicts = create_dict_to_list([(d['kp'], d) for d in dicts])
         all_kps = set(kp_to_dicts.keys())
         all_kps = all_kps - {'none'}
@@ -488,7 +241,9 @@ class KpAnalysisUtils:
         edges = [{'source': i, 'target': j, 'score': edge_to_score[i, j]} for (i, j) in edge_to_score]
         graph = {'nodes': nodes, 'edges': edges}
 
-        return graph_to_graph_data(graph, n_sentences), dicts
+        return graph_to_graph_data(graph, n_sentences)
+
+
 
     @staticmethod
     def graph_data_to_hierarchical_graph_data(graph_data_json_file=None,
@@ -589,7 +344,6 @@ class KpAnalysisUtils:
                     f.write("%s\n" % line)
         return bullets_txt
 
-
     @staticmethod
     def generate_graphs_and_textual_summary(result_file, min_n_similar_matches_in_graph=5,
                                             n_top_matches_in_graph=20,
@@ -598,6 +352,26 @@ class KpAnalysisUtils:
                                             include_match_score_in_docx=False,
                                             min_n_matches_in_docx=5,
                                             save_only_docx=False):
+        kpa_result = KpaResult.create_from_result_csv(result_file)
+        KpAnalysisUtils.generate_graphs_and_textual_summary_kpa_result(kpa_result, result_filename=result_file,
+                                                            min_n_similar_matches_in_graph=min_n_similar_matches_in_graph,
+                                                            n_top_matches_in_graph=n_top_matches_in_graph,
+                                                            filter_min_relations_for_text=filter_min_relations_for_text,
+                                                            n_top_matches_in_docx=n_top_matches_in_docx,
+                                                            include_match_score_in_docx=include_match_score_in_docx,
+                                                            min_n_matches_in_docx=min_n_matches_in_docx,
+                                                            save_only_docx=save_only_docx)
+
+
+    @staticmethod
+    def generate_graphs_and_textual_summary_kpa_result(kpa_result: KpaResult, result_filename,
+                                                       min_n_similar_matches_in_graph=5,
+                                                       n_top_matches_in_graph=20,
+                                                       filter_min_relations_for_text=0.4,
+                                                       n_top_matches_in_docx=50,
+                                                       include_match_score_in_docx=False,
+                                                       min_n_matches_in_docx=5,
+                                                       save_only_docx=False):
         '''
         result_file: the ..._result.csv that is saved using write_result_to_csv method.
         min_n_similar_matches_in_graph: the minimal number of matches that match both key points when calculating the relation between them.
@@ -616,15 +390,15 @@ class KpAnalysisUtils:
             * <result_file>_hierarchical.txt: This textual file shows the simplified graph (from the previous bullet) as a list of hierarchical bullets.
             * <result_file>_hierarchical.docx: This Microsoft Word document shows the textual bullets (from the previous bullet) as a user-friendly report.
         '''
-        graph_data_full, results_dicts = KpAnalysisUtils.create_graph_data(result_file,
+        graph_data_full = KpAnalysisUtils.create_graph_data(kpa_result,
                                                             min_n_similar_matches=min_n_similar_matches_in_graph,
                                                             n_matches_samples=n_top_matches_in_graph)
         if not save_only_docx:
-            KpAnalysisUtils.save_graph_data(graph_data_full, result_file.replace('.csv', '_graph_data.json'))
+            KpAnalysisUtils.save_graph_data(graph_data_full, result_filename.replace('.csv', '_graph_data.json'))
 
         graph_data_hierarchical = KpAnalysisUtils.graph_data_to_hierarchical_graph_data(graph_data=graph_data_full)
         if not save_only_docx:
-            KpAnalysisUtils.save_graph_data(graph_data_hierarchical, result_file.replace('.csv', '_hierarchical_graph_data.json'))
+            KpAnalysisUtils.save_graph_data(graph_data_hierarchical, result_filename.replace('.csv', '_hierarchical_graph_data.json'))
 
         if filter_min_relations_for_text > 0:
             nodes = [d for d in graph_data_hierarchical if d['type'] == 'node']
@@ -633,14 +407,14 @@ class KpAnalysisUtils:
             graph_data_hierarchical = nodes + edges
 
         if not save_only_docx:
-            KpAnalysisUtils.hierarchical_graph_data_to_textual_bullets(graph_data=graph_data_hierarchical, out_file=result_file.replace('.csv', '_hierarchical_bullets.txt'))
-        save_hierarchical_graph_data_to_docx(graph_data=graph_data_hierarchical, result_file=result_file, n_top_matches=n_top_matches_in_docx, include_match_score=include_match_score_in_docx, min_n_matches=min_n_matches_in_docx)
+            KpAnalysisUtils.hierarchical_graph_data_to_textual_bullets(graph_data=graph_data_hierarchical, out_file=result_filename.replace('.csv', '_hierarchical_bullets.txt'))
+        save_hierarchical_graph_data_to_docx(kpa_result=kpa_result, graph_data=graph_data_hierarchical, result_filename=result_filename, n_top_matches=n_top_matches_in_docx, include_match_score=include_match_score_in_docx, min_n_matches=min_n_matches_in_docx)
 
     @staticmethod
-    def get_hierarchical_graph_from_tree_and_subset_results(graph_data_hierarchical, results_file,
+    def get_hierarchical_graph_from_tree_and_subset_results(graph_data_hierarchical, kpa_result,
                                                             filter_min_relations_for_text=0.4,
                                                             n_top_matches_in_graph=20):
-        results_df = pd.read_csv(results_file)
+        results_df = kpa_result.result_df
         n_sentences = len(set(results_df["sentence_text"]))
         results_kps = [kp for kp in set(results_df["kp"]) if kp != "none"]
 
@@ -710,19 +484,29 @@ class KpAnalysisUtils:
         return new_nodes + edges
 
     @staticmethod
-    def generate_graphs_and_textual_summary_for_given_tree(hierarchical_data_file, results_file, file_suff = "_from_full",
+    def generate_graphs_and_textual_summary_for_given_tree(hierarchical_data_file, results_file, file_suff="_from_full",
                                                            n_top_matches_in_graph=20,
                                                            filter_min_relations_for_text=0.4,
                                                            n_top_matches_in_docx=50,
                                                            include_match_score_in_docx=False,
                                                            min_n_matches_in_docx=5,
                                                            save_only_docx=False):
+        '''
+        Create hierarchical results for results_file, using a precalculated hierarchical results hierarchical_data_file.
+        This is useful when we first create hierarchical_data_file using the whole data, and then want to calculate the
+        hierarchical result of its subset while considering the already existing hierarchy generated over the whole data.
+        For example, when we have a large survey, we can first run over the entire data using the method
+        generate_graphs_and_textual_summary method to create a hierarchical representation of the results. Then when we
+        want to evaluate a subset of the survey we can run over a subset of the survey and when we create its
+        hierarchical representation we will use the hierarchical_data_file of the full survey.
+        '''
 
         with open (hierarchical_data_file, "r") as f:
             graph_data_hierarchical = json.load(f)
 
+        kpa_result = KpaResult.create_from_result_csv(results_file)
         new_hierarchical_graph_data = KpAnalysisUtils.get_hierarchical_graph_from_tree_and_subset_results(graph_data_hierarchical,
-                                                    results_file, filter_min_relations_for_text, n_top_matches_in_graph)
+                                                    kpa_result, filter_min_relations_for_text, n_top_matches_in_graph)
 
         if not new_hierarchical_graph_data:
             return
@@ -732,56 +516,10 @@ class KpAnalysisUtils:
             KpAnalysisUtils.save_graph_data(new_hierarchical_graph_data, new_hierarchical_graph_file)
             bullets_file = new_hierarchical_graph_file.replace('_graph_data.json', '_bullets.txt')
             KpAnalysisUtils.hierarchical_graph_data_to_textual_bullets(graph_data=new_hierarchical_graph_data,
-                                                                           out_file=bullets_file)
+                                                                       out_file=bullets_file)
 
-        save_hierarchical_graph_data_to_docx(graph_data=new_hierarchical_graph_data, result_file=results_file,
+        save_hierarchical_graph_data_to_docx(kpa_result=kpa_result, graph_data=new_hierarchical_graph_data,
+                                             result_filename=results_file,
                                              n_top_matches=n_top_matches_in_docx,
                                              include_match_score=include_match_score_in_docx,
                                              min_n_matches=min_n_matches_in_docx, file_suff=file_suff)
-
-    @staticmethod
-    def read_result_csv_into_result_json(result_file):
-        df = pd.read_csv(result_file)
-        kp_to_matches = defaultdict(list)
-        for i, r in df.iterrows():
-            kp = str(r['kp'])
-            kp_stance = None
-            match = dict(r)
-            del match['kp']
-            if 'kp_stance' in match:
-                kp_stance = match['kp_stance']
-                del match['kp_stance']
-            for k in match:
-                match[k] = str(match[k])
-            match['score'] = match['match_score']
-            del match['match_score']
-
-            if 'stance' in match:
-                if isinstance(match['stance'], str):
-                    match['stance'] = ast.literal_eval(match['stance'])
-            else:
-                stance = {}
-                if 'pos_score' in match:
-                    stance['pos'] = float(match['pos_score'])
-                if 'neg_score' in match:
-                    stance['neg'] = float(match['neg_score'])
-                if 'sug_score' in match:
-                    stance['sug'] = float(match['sug_score'])
-                if 'neut_score' in match:
-                    stance['neut'] = float(match['neut_score'])
-                if len(stance) > 0:
-                    match['stance'] = stance
-
-            kp_to_matches[(kp, kp_stance)].append(match)
-        result_json = {'keypoint_matchings': []}
-        for (kp, stance), matchings in kp_to_matches.items():
-            km = {'keypoint': kp, 'matching': matchings}
-            if stance is not None:
-                km['stance'] = stance
-            result_json['keypoint_matchings'].append(km)
-        return result_json
-
-
-
-
-

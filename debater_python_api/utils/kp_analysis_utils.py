@@ -3,9 +3,6 @@ import os
 from collections import defaultdict
 from pathlib import Path
 
-import pandas as pd
-import numpy as np
-
 def print_kps_summary(result):
     keypoint_matchings = result['keypoint_matchings']
     for keypoint_matching in keypoint_matchings:
@@ -47,18 +44,3 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
     # Print New Line on Complete
     if iteration == total:
         print()
-
-
-def create_dict_to_list(list_tups):
-    res = defaultdict(list)
-    for x, y in list_tups:
-        res[x].append(y)
-    return dict(res)
-
-def write_df_to_file(df, file):
-    logging.info("Writing dataframe to: " + file)
-    file_path = Path(file)
-    if not os.path.exists(file_path.parent):
-        logging.info('creating directory: %s' % str(file_path.parent))
-        os.makedirs(file_path.parent)
-    df.to_csv(file, index=False)
