@@ -501,10 +501,31 @@ class KpAnalysisUtils:
         hierarchical representation we will use the hierarchical_data_file of the full survey.
         '''
 
+        kpa_result = KpaResult.create_from_result_csv(results_file)
+        KpAnalysisUtils.generate_graphs_and_textual_summary_for_given_tree_kpa_result(
+                                                        hierarchical_data_file,
+                                                        kpa_result = kpa_result,
+                                                        results_file = results_file, file_suff = file_suff,
+                                                        n_top_matches_in_graph = n_top_matches_in_graph,
+                                                        filter_min_relations_for_text = filter_min_relations_for_text,
+                                                        n_top_matches_in_docx = n_top_matches_in_docx,
+                                                        include_match_score_in_docx = include_match_score_in_docx,
+                                                        min_n_matches_in_docx = min_n_matches_in_docx,
+                                                        save_only_docx = save_only_docx)
+
+    @staticmethod
+    def generate_graphs_and_textual_summary_for_given_tree_kpa_result(hierarchical_data_file, kpa_result: KpaResult,
+                                                           results_file, file_suff="_from_full",
+                                                           n_top_matches_in_graph=20,
+                                                           filter_min_relations_for_text=0.4,
+                                                           n_top_matches_in_docx=50,
+                                                           include_match_score_in_docx=False,
+                                                           min_n_matches_in_docx=5,
+                                                           save_only_docx=False):
+
         with open (hierarchical_data_file, "r") as f:
             graph_data_hierarchical = json.load(f)
 
-        kpa_result = KpaResult.create_from_result_csv(results_file)
         new_hierarchical_graph_data = KpAnalysisUtils.get_hierarchical_graph_from_tree_and_subset_results(graph_data_hierarchical,
                                                     kpa_result, filter_min_relations_for_text, n_top_matches_in_graph)
 
@@ -523,3 +544,4 @@ class KpAnalysisUtils:
                                              n_top_matches=n_top_matches_in_docx,
                                              include_match_score=include_match_score_in_docx,
                                              min_n_matches=min_n_matches_in_docx, file_suff=file_suff)
+
