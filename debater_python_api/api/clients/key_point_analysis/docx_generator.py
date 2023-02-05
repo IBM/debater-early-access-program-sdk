@@ -79,15 +79,48 @@ def set_heading(heading):
     paragraph_format.keep_together = False
 
 
-def get_unique_matches_subtree(node_id, id_to_node, id_to_kids, id_to_n_unique_matches_subtree, kp_to_dicts):
+def get_unique_matches_subtree(node_id, id_to_node, id_to_kids, id_to_n_unique_matches_subtree, kp_to_dicts, by_sentence = True):
     kp = id_to_node[node_id]['data']['kp']
-    kp_unique_sentences = set([d['comment_id'] + '_' + d['sentence_id'] for d in kp_to_dicts[kp]])
-
+    if by_sentence:
+        kp_unique_sentences = set([get_unique_sent_id(d) for d in kp_to_dicts[kp]])
+    else: # by comments
+        kp_unique_sentences = set([d['comment_id'] for d in kp_to_dicts[kp]])
     if node_id in id_to_kids:
         for kid in id_to_kids[node_id]:
-            kp_unique_sentences = kp_unique_sentences.union(get_unique_matches_subtree(kid, id_to_node, id_to_kids, id_to_n_unique_matches_subtree, kp_to_dicts))
+            kp_unique_sentences = kp_unique_sentences.union(get_unique_matches_subtree(kid, id_to_node, id_to_kids, id_to_n_unique_matches_subtree, kp_to_dicts, by_sentence))
     id_to_n_unique_matches_subtree[node_id] = len(kp_unique_sentences)
     return kp_unique_sentences
+
+
+def get_unique_sent_id(d):
+    return f"{d['comment_id']}_{d['sentence_id']}"
+
+
+def add_data_stats(dicts, nodes_ids, document, stance, min_n_matches):
+    dicts_not_none = list(filter(lambda r: r["kp"] != "none", dicts))
+    n_sents = len(set([get_unique_sent_id(d) for d in dicts]))
+    rate_matched_sents = 100 *len(set([get_unique_sent_id(d) for d in dicts_not_none])) / n_sents
+    n_comments = len(set([d["comment_id"] for d in dicts]))
+    rate_matched_comments = 100 *len(set([d["comment_id"] for d in dicts_not_none])) / n_comments
+    n_kps = len(nodes_ids)
+    if stance == "pos":
+        stance_str = " with positive sentiment"
+    elif stance == "neg":
+        stance_str = " with negative sentiment"
+    else:
+        stance_str = ""
+
+    heading = document.add_heading('Data Statistics', 1)
+    set_heading(heading)
+    p = document.add_paragraph()
+    run = p.add_run(
+         f'Analyzed {n_comments} comments ({n_sents} sentences){stance_str}.\n'
+        f'Identified {n_kps} key points with at least {min_n_matches or 1} matching sentences.\n'
+        f'{int(rate_matched_comments)}% of the comments (and {int(rate_matched_sents)}%'
+        f' of the sentences) were matched to at least one key point.'
+        )
+
+    run.font.size = Pt(12)
 
 
 def save_hierarchical_graph_data_to_docx(kpa_result: KpaResult, graph_data, result_filename, n_top_matches=None, sort_by_subtree=True, include_match_score=False, min_n_matches=5, file_suff=""):
@@ -174,6 +207,8 @@ def save_hierarchical_graph_data_to_docx(kpa_result: KpaResult, graph_data, resu
         insertHR(p)
     else:
         insertHR(heading)
+
+    add_data_stats(dicts, nodes_ids, document, stance, min_n_matches)
 
     heading = document.add_heading('Key Point Hierarchy', 1)
     set_heading(heading)
