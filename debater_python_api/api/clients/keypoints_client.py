@@ -172,8 +172,8 @@ class KpAnalysisClient(AbstractClient):
               * arg_min_len (Integer, set to 4 by default): Filter shorter sentences (by number of tokens).
               * arg_max_len (Integer, set to 36 by default): Filter longer sentences (by number of tokens).
               * arg_relative_aq_threshold (Float in [0.0,1.0], set to 1.0 by default): Filter sentences having a quality score below this precentile (useful to filter out low quality data in the data-set).
-              * clustering_threshold (Float in [0.0,1.0], set to 0.99 by default): Used for key points selection: choose higher values for more fine-grained key points, and lower for more distinct key points.
-              * mapping_threshold (Float in [0.0,1.0], set to 0.99 by default): The matching threshold, scores above are considered a match. A higher threshold leads to a higher precision and a lower coverage.
+              * mapping_policy (String in ["STRICT","NORMAL","LOOSE"], "NORMAL" by default): Policy for determining if an argument is matched to a key point: for “STRICT”, only pairs with high matching
+              scores are considered matched, leading to a higher precision and a lower coverage, and vice versa for "LOOSE".
               * sentence_to_multiple_kps (Boolean, False by default): When True, a sentence is matched to all key points with score above threshold. Otherwise only to one key point with highest match score above threshold.
               * n_top_kps (Integer, default is set by an internal algorithm): Number of key points to generate. Lower value will make the job finish faster. All sentences are re-mapped to these key point.
               * kp_relative_aq_threshold (Float in [0.0,1.0], set to 0.65 by default): Sentences having AQ score below this precentile will not be selected as key point candidates.
