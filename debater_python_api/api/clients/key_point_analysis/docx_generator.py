@@ -82,7 +82,7 @@ def set_heading(heading):
 def get_unique_matches_subtree(node_id, id_to_node, id_to_kids, id_to_n_unique_matches_subtree, kp_to_dicts, by_sentence = True):
     kp = id_to_node[node_id]['data']['kp']
     if by_sentence:
-        kp_unique_sentences = set([get_unique_sent_id(d) for d in kp_to_dicts[kp]])
+        kp_unique_sentences = set([KpaResult.get_unique_sent_id(d) for d in kp_to_dicts[kp]])
     else: # by comments
         kp_unique_sentences = set([d['comment_id'] for d in kp_to_dicts[kp]])
     if node_id in id_to_kids:
@@ -91,15 +91,10 @@ def get_unique_matches_subtree(node_id, id_to_node, id_to_kids, id_to_n_unique_m
     id_to_n_unique_matches_subtree[node_id] = len(kp_unique_sentences)
     return kp_unique_sentences
 
-
-def get_unique_sent_id(d):
-    return f"{d['comment_id']}_{d['sentence_id']}"
-
-
 def add_data_stats(dicts, nodes_ids, document, stance, min_n_matches):
     dicts_not_none = list(filter(lambda r: r["kp"] != "none", dicts))
-    n_sents = len(set([get_unique_sent_id(d) for d in dicts]))
-    rate_matched_sents = 100 *len(set([get_unique_sent_id(d) for d in dicts_not_none])) / n_sents
+    n_sents = len(set([KpaResult.get_unique_sent_id(d) for d in dicts]))
+    rate_matched_sents = 100 *len(set([KpaResult.get_unique_sent_id(d) for d in dicts_not_none])) / n_sents
     n_comments = len(set([d["comment_id"] for d in dicts]))
     rate_matched_comments = 100 *len(set([d["comment_id"] for d in dicts_not_none])) / n_comments
     n_kps = len(nodes_ids)

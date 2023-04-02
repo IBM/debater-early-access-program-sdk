@@ -1,5 +1,6 @@
 import ast
 import logging
+import math
 from collections import defaultdict
 
 import pandas as pd
@@ -10,11 +11,12 @@ from debater_python_api.api.clients.key_point_analysis.utils import read_dicts_f
 
 
 class KpaResult:
-    def __init__(self, result_json, result_df, summary_df, hierarchy_df):
+    def __init__(self, result_json, result_df, summary_df, hierarchy_df, name=None):
         self.result_json = result_json
         self.result_df = result_df
         self.summary_df = summary_df
         self.hierarchy_df = hierarchy_df
+        self.name = name if name else "kpa_results"
 
     @staticmethod
     def result_json_to_result_df(result):
@@ -67,8 +69,7 @@ class KpaResult:
 
         kp_to_dicts = create_dict_to_list([(d['kp'], d) for d in dicts])
 
-        all_sentences_ids = set([str(d['comment_id']) + "_" + str(d['sentence_id']) for d in dicts])
-        total_sentences = len(all_sentences_ids)
+        total_sentences = KpaResult.get_number_of_unique_sentences_for_csv_results(result_df)
 
         all_comment_ids = set([d["comment_id"] for d in dicts])
         total_comments = len(all_comment_ids)
@@ -181,23 +182,23 @@ class KpaResult:
         return result_json
 
     @staticmethod
-    def create_from_result_json(result_json):
+    def create_from_result_json(result_json, name=None):
         if 'keypoint_matchings' not in result_json:
             logging.info("No keypoint matchings results")
-            return KpaResult(result_json, None, None, None)
+            return KpaResult(result_json, None, None, None, name)
         else:
             result_df = KpaResult.result_json_to_result_df(result_json)
             summary_df = KpaResult.result_df_to_summary_df(result_df)
             summary_df, hierarchy_df = KpaResult.update_dataframes_with_hierarchical_results(result_df, summary_df)
-            return KpaResult(result_json, result_df, summary_df, hierarchy_df)
+            return KpaResult(result_json, result_df, summary_df, hierarchy_df, name)
 
     @staticmethod
-    def create_from_result_csv(result_csv):
+    def create_from_result_csv(result_csv, name=None):
         result_df = pd.read_csv(result_csv)
         result_json = KpaResult.result_df_to_result_json(result_df)
         summary_df = KpaResult.result_df_to_summary_df(result_df)
         summary_df, hierarchy_df = KpaResult.update_dataframes_with_hierarchical_results(result_df, summary_df)
-        return KpaResult(result_json, result_df, summary_df, hierarchy_df)
+        return KpaResult(result_json, result_df, summary_df, hierarchy_df, name)
 
     def write_to_file(self, result_file, also_hierarchy=True):
         if '.csv' not in result_file:
@@ -217,7 +218,8 @@ class KpaResult:
     def print_result(self, n_sentences_per_kp, title):
         '''
         Prints the key point analysis result to console.
-        :param result_json: the result, returned by method get_result in KpAnalysisTaskFuture.
+        :param n_sentences_per_kp: number of top matched sentences to display for each key point
+        :param title: title to print for the analysis
         '''
         def split_sentence_to_lines(sentence, max_len=90):
             if len(sentence) <= max_len:
@@ -271,16 +273,10 @@ class KpaResult:
 
         parents.sort(key=lambda x: kp_to_n_matches_subtree[x['keypoint']], reverse=True)
 
-        total_sentences = set()
-        matched_sentences = set()
-        for i, keypoint_matching in enumerate(self.result_json['keypoint_matchings']):
-            matches = keypoint_matching['matching']
-            matching_sents_ids = set([d["comment_id"] +"_" + d["sentence_id"] for d in matches])
-            total_sentences = total_sentences.union(matching_sents_ids)
-            if keypoint_matching['keypoint'] != 'none':  # skip cluster of all unmatched sentences
-                matched_sentences = matched_sentences.union(matching_sents_ids)
+        n_total_sentences = self.get_number_of_unique_sentences(include_unmatched=True)
+        n_matched_sentences = self.get_number_of_unique_sentences(include_unmatched=False)
 
-        print(title + ' coverage: %.2f' % ((float(len(matched_sentences)) / float(len(total_sentences))) * 100.0))
+        print(title + ' coverage: %.2f' % (float(n_matched_sentences) / float(n_total_sentences) * 100.0))
         print(title + ' key points:')
         for parent in parents:
             kp = parent['keypoint']
@@ -293,3 +289,68 @@ class KpaResult:
                 kid_kp = kid['keypoint']
                 kid_stance = None if 'stance' not in kid else kid['stance']
                 print_kp(kid_kp, kid_stance, len(kid['matching']), None, 1, kid, n_sentences_per_kp)
+
+    @staticmethod
+    def get_unique_sent_id(sentence_dict):
+        return f"{sentence_dict['comment_id']}_{sentence_dict['sentence_id']}"
+
+    def get_number_of_unique_sentences(self, include_unmatched=True):
+        return KpaResult.get_number_of_unique_sentences_for_json_results(self.result_json, include_unmatched)
+
+    @staticmethod
+    def get_number_of_unique_sentences_for_json_results(result_json, include_unmatched=True):
+        total_sentences = set()
+        for i, keypoint_matching in enumerate(result_json['keypoint_matchings']):
+            matches = keypoint_matching['matching']
+            matching_sents_ids = set([KpaResult.get_unique_sent_id(d) for d in matches])
+            if keypoint_matching['keypoint'] != 'none' or include_unmatched:
+                total_sentences = total_sentences.union(matching_sents_ids)
+        return len(total_sentences)
+
+    @staticmethod
+    def get_number_of_unique_sentences_for_csv_results(result_df, include_unmatched=True):
+        result_json = KpaResult.result_df_to_result_json(result_df)
+        return KpaResult.get_number_of_unique_sentences_for_json_results(result_json, include_unmatched)
+
+    def get_kp_to_n_matched_sentences(self, include_none=True):
+        kps_n_args = {kp['keypoint']: len(kp['matching']) for kp in self.result_json['keypoint_matchings']
+                       if kp['keypoint'] != 'none' or include_none}
+        return kps_n_args
+
+    def compare_with_other(self, other_results):
+        title_1 = self.name
+        result_1_total_sentences = self.get_number_of_unique_sentences(include_unmatched=True)
+        kps1_n_args = self.get_kp_to_n_matched_sentences(include_none=False)
+        kps1 = set(kps1_n_args.keys())
+
+        title_2 = other_results.name
+        result_2_total_sentences = other_results.get_number_of_unique_sentences(include_unmatched=True)
+        kps2_n_args = other_results.get_kp_to_n_matched_sentences(include_none=False)
+        kps2 = set(kps2_n_args.keys())
+
+        kps_in_both = kps1.intersection(kps2)
+        kps_in_both = sorted(list(kps_in_both), key=lambda kp: kps1_n_args[kp], reverse=True)
+        cols = ['key point', f'{title_1}_n_sents', f'{title_1}_percent', f'{title_2}_n_sents', f'{title_2}_percent',
+                'change_n_sents', 'change_percent']
+        rows = []
+        for kp in kps_in_both:
+            sents1 = kps1_n_args[kp]
+            sents2 = kps2_n_args[kp]
+            percent1 = (sents1 / result_1_total_sentences) * 100.0
+            percent2 = (sents2 / result_2_total_sentences) * 100.0
+            rows.append([kp, sents1, f'{percent1:.2f}%', sents2, f'{percent2:.2f}%', str(math.floor((sents2 - sents1))),
+                         f'{(percent2 - percent1):.2f}%'])
+        kps1_not_in_2 = kps1 - kps2
+        kps1_not_in_2 = sorted(list(kps1_not_in_2), key=lambda kp: kps1_n_args[kp], reverse=True)
+        for kp in kps1_not_in_2:
+            sents1 = kps1_n_args[kp]
+            percent1 = (sents1 / result_1_total_sentences) * 100.0
+            rows.append([kp, sents1, f'{percent1:.2f}%', '---', '---', '---', '---'])
+        kps2_not_in_1 = kps2 - kps1
+        kps2_not_in_1 = sorted(list(kps2_not_in_1), key=lambda kp: kps2_n_args[kp], reverse=True)
+        for kp in kps2_not_in_1:
+            sents2 = kps2_n_args[kp]
+            percent2 = (sents2 / result_2_total_sentences) * 100.0
+            rows.append([kp, '---', '---', sents2, f'{percent2:.2f}%', '---', '---'])
+        comparison_df = pd.DataFrame(rows, columns=cols)
+        return comparison_df

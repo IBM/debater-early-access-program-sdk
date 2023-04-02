@@ -67,44 +67,9 @@ class KpAnalysisUtils:
 
     @staticmethod
     def compare_results(result_1, result_2, title_1='result1', title_2='result2'):
-        kps1 = set([kp['keypoint'] for kp in result_1['keypoint_matchings'] if kp['keypoint'] != 'none'])
-        kps1_n_args = {kp['keypoint']: len(kp['matching']) for kp in result_1['keypoint_matchings']
-                       if kp['keypoint'] != 'none'}
-
-        result_1_total_sentences = np.sum([len(kp['matching']) for kp in result_1['keypoint_matchings']])
-
-        kps2 = set([kp['keypoint'] for kp in result_2['keypoint_matchings'] if kp['keypoint'] != 'none'])
-        kps2_n_args = {kp['keypoint']: len(kp['matching']) for kp in result_2['keypoint_matchings']
-                       if kp['keypoint'] != 'none'}
-
-        result_2_total_sentences = np.sum([len(kp['matching']) for kp in result_2['keypoint_matchings']])
-
-        kps_in_both = kps1.intersection(kps2)
-        kps_in_both = sorted(list(kps_in_both), key=lambda kp: kps1_n_args[kp], reverse=True)
-        cols = ['key point', f'{title_1}_n_sents', f'{title_1}_percent', f'{title_2}_n_sents', f'{title_2}_percent',
-                'change_n_sents', 'change_percent']
-        rows = []
-        for kp in kps_in_both:
-            sents1 = kps1_n_args[kp]
-            sents2 = kps2_n_args[kp]
-            percent1 = (sents1 / result_1_total_sentences) * 100.0
-            percent2 = (sents2 / result_2_total_sentences) * 100.0
-            rows.append([kp, sents1, f'{percent1:.2f}%', sents2, f'{percent2:.2f}%', str(math.floor((sents2 - sents1))),
-                         f'{(percent2 - percent1):.2f}%'])
-        kps1_not_in_2 = kps1 - kps2
-        kps1_not_in_2 = sorted(list(kps1_not_in_2), key=lambda kp: kps1_n_args[kp], reverse=True)
-        for kp in kps1_not_in_2:
-            sents1 = kps1_n_args[kp]
-            percent1 = (sents1 / result_1_total_sentences) * 100.0
-            rows.append([kp, sents1, f'{percent1:.2f}%', '---', '---', '---', '---'])
-        kps2_not_in_1 = kps2 - kps1
-        kps2_not_in_1 = sorted(list(kps2_not_in_1), key=lambda kp: kps2_n_args[kp], reverse=True)
-        for kp in kps2_not_in_1:
-            sents2 = kps2_n_args[kp]
-            percent2 = (sents2 / result_2_total_sentences) * 100.0
-            rows.append([kp, '---', '---', sents2, f'{percent2:.2f}%', '---', '---'])
-        comparison_df = pd.DataFrame(rows, columns=cols)
-        return comparison_df
+        kpa_results_1 = KpaResult.create_from_result_json(result_1, name=title_1)
+        kpa_results_2 = KpaResult.create_from_result_json(result_2, name=title_2)
+        return kpa_results_1.compare_with_other(kpa_results_2)
 
     @staticmethod
     def print_result(result_json, n_sentences_per_kp, title):
@@ -129,7 +94,7 @@ class KpAnalysisUtils:
         cols = list(sentences[0].keys())
         rows = [[s[col] for col in cols] for s in sentences]
         df = pd.DataFrame(rows, columns=cols)
-        if "stance_dict" in cols:
+        if "stance_dict" in cols and sentences[0]["stance_dict"]:
             df = df.apply(lambda r: get_selected_stance(r), axis=1)
         df.to_csv(out_file, index=False)
 
@@ -544,4 +509,3 @@ class KpAnalysisUtils:
                                              n_top_matches=n_top_matches_in_docx,
                                              include_match_score=include_match_score_in_docx,
                                              min_n_matches=min_n_matches_in_docx, file_suff=file_suff)
-
