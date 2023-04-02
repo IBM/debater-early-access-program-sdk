@@ -1,5 +1,5 @@
+from debater_python_api.api.clients.key_point_analysis.KpAnalysisUtils import KpAnalysisUtils
 from debater_python_api.api.debater_api import DebaterApi
-from debater_python_api.api.clients.keypoints_client import KpAnalysisUtils
 
 debater_api = DebaterApi('PUT_YOUR_API_KEY_HERE')
 keypoints_client = debater_api.get_keypoints_client()
@@ -14,9 +14,9 @@ comments_texts = [
     'Marijuana is very addictive, and therefore very dangerous'
     'Cannabis is addictive and very dangerous for use.',
     'Cannabis can be very harmful and addictive, especially for young people',
-    'Cannabis is dangerous and addictive.'
+    'Cannabis is very addictive.'
                   ]
 
 KpAnalysisUtils.init_logger()
 keypoint_matchings = keypoints_client.run(comments_texts)
-KpAnalysisUtils.print_result(keypoint_matchings, print_matches=True)
+KpAnalysisUtils.print_result(keypoint_matchings, n_sentences_per_kp=10, title="KPA Example")

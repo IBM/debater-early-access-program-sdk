@@ -5,7 +5,7 @@ import unittest
 
 from hamcrest import assert_that
 
-from debater_python_api.api.clients.keypoints_client import KpAnalysisUtils
+from debater_python_api.api.clients.key_point_analysis.KpAnalysisUtils import KpAnalysisUtils
 from debater_python_api.api.clients.narrative_generation_client import Polarity
 from debater_python_api.api.sentence_level_index.client.sentence_query_base import SimpleQuery
 from debater_python_api.api.sentence_level_index.client.sentence_query_request import SentenceQueryRequest
