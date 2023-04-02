@@ -271,15 +271,16 @@ class KpaResult:
 
         parents.sort(key=lambda x: kp_to_n_matches_subtree[x['keypoint']], reverse=True)
 
-        total_sentences = 0
-        matched_sentences = 0
+        total_sentences = set()
+        matched_sentences = set()
         for i, keypoint_matching in enumerate(self.result_json['keypoint_matchings']):
             matches = keypoint_matching['matching']
-            total_sentences += len(matches)
+            matching_sents_ids = set([d["comment_id"] +"_" + d["sentence_id"] for d in matches])
+            total_sentences = total_sentences.union(matching_sents_ids)
             if keypoint_matching['keypoint'] != 'none':  # skip cluster of all unmatched sentences
-                matched_sentences += len(matches)
+                matched_sentences = matched_sentences.union(matching_sents_ids)
 
-        print(title + ' coverage: %.2f' % ((float(matched_sentences) / float(total_sentences)) * 100.0))
+        print(title + ' coverage: %.2f' % ((float(len(matched_sentences)) / float(len(total_sentences))) * 100.0))
         print(title + ' key points:')
         for parent in parents:
             kp = parent['keypoint']
