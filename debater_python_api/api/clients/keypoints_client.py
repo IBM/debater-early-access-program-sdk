@@ -31,24 +31,21 @@ class KpAnalysisClient(AbstractClient):
         AbstractClient.__init__(self, apikey)
         self.host = host if host is not None else 'https://keypoint-matching-backend.debater.res.ibm.com'
 
-    def _delete(self, url, params, use_cache=True, timeout=300, retries=10, headers=None):
-        return self._run_request_with_retry(requests.delete, url, params, use_cache, timeout, retries, headers)
+    def _delete(self, url, params, timeout=300, retries=10, headers=None):
+        return self._run_request_with_retry(requests.delete, url, params, timeout, retries, headers)
 
-    def _get(self, url, params, use_cache=True, timeout=300, retries=10, headers=None):
-        return self._run_request_with_retry(requests.get, url, params, use_cache, timeout, retries, headers)
+    def _get(self, url, params, timeout=300, retries=10, headers=None):
+        return self._run_request_with_retry(requests.get, url, params, timeout, retries, headers)
 
-    def _post(self, url, body, use_cache=True, timeout=300, retries=10, headers=None):
-        return self._run_request_with_retry(requests.post, url, body, use_cache, timeout, retries, headers)
+    def _post(self, url, body, timeout=300, retries=10, headers=None):
+        return self._run_request_with_retry(requests.post, url, body, timeout, retries, headers)
 
-    def _run_request_with_retry(self, func, url, params, use_cache=True, timeout=20, retries=10, headers_input=None):
+    def _run_request_with_retry(self, func, url, params, timeout=20, retries=10, headers_input=None):
         headers = get_default_request_header(self.apikey)
         if headers_input is not None:
             headers.update(headers_input)
 
         logging.info('client calls service (%s): %s' % (func.__name__, url))
-        if not use_cache:
-            headers['cache-control'] = 'no-cache'
-
         while True:
             try:
                 if func.__name__ == 'post':
@@ -158,7 +155,7 @@ class KpAnalysisClient(AbstractClient):
             time.sleep(polling_timout_secs if polling_timout_secs is not None else 10)
 
     def start_kp_analysis_job(self, domain: str, comments_ids: Optional[List[str]]=None,
-                              run_params=None, description: Optional[str]=None, use_cache: bool = True) -> 'KpAnalysisTaskFuture':
+                              run_params=None, description: Optional[str]=None) -> 'KpAnalysisTaskFuture':
         '''
         Starts a Key Point Analysis (KPA) job in an async manner. Please make sure all comments had already been uploaded into a domain and processed before starting a new job (using the wait_till_all_comments_are_processed method).
           * By default it runs over all comments in the domain. In order to run only on a subset of the comments in the domain, pass their ids in the comment_ids param.
@@ -182,7 +179,6 @@ class KpAnalysisClient(AbstractClient):
         :param comments_ids: when None is passed, it uses all comments in the domain (typical usage) otherwise it only uses the comments according to the provided list of comment_ids.
         :param run_params: a dictionary with different parameters and their values (see description above). e.g. run_param={'arg_min_len': 5, 'arg_max_len': 40, 'mapping_threshold': 0.0}
         :param description: add a description to a job so it will be easy to detecte it in the user-report.
-        :param use_cache: determines whether the cache is used (should be kept as True for faster more efficient runs).
         :return: KpAnalysisTaskFuture: an object that enables the retrieval of the results in an async manner.
         '''
 
@@ -198,7 +194,7 @@ class KpAnalysisClient(AbstractClient):
         if description is not None:
             body['description'] = description
 
-        res = self._post(url=self.host + kp_extraction_endpoint, body=body, use_cache=use_cache)
+        res = self._post(url=self.host + kp_extraction_endpoint, body=body)
         logging.info(f'started a kp analysis job - domain: {domain}, run_params: {run_params}, {"" if description is None else f"description: {description}, "}job_id: {res["job_id"]}')
         return KpAnalysisTaskFuture(self, res['job_id'])
 
