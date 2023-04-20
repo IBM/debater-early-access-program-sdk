@@ -313,7 +313,7 @@ class KpAnalysisUtils:
     def generate_graphs_and_textual_summary(result_file, min_n_similar_matches_in_graph=5,
                                             n_top_matches_in_graph=20,
                                             filter_min_relations_for_text=0.4,
-                                            n_top_matches_in_docx=50,
+                                            n_matches_in_docx=50,
                                             include_match_score_in_docx=False,
                                             min_n_matches_in_docx=5,
                                             save_only_docx=False):
@@ -322,7 +322,7 @@ class KpAnalysisUtils:
                                                             min_n_similar_matches_in_graph=min_n_similar_matches_in_graph,
                                                             n_top_matches_in_graph=n_top_matches_in_graph,
                                                             filter_min_relations_for_text=filter_min_relations_for_text,
-                                                            n_top_matches_in_docx=n_top_matches_in_docx,
+                                                            n_matches_in_docx=n_matches_in_docx,
                                                             include_match_score_in_docx=include_match_score_in_docx,
                                                             min_n_matches_in_docx=min_n_matches_in_docx,
                                                             save_only_docx=save_only_docx)
@@ -333,7 +333,7 @@ class KpAnalysisUtils:
                                                        min_n_similar_matches_in_graph=5,
                                                        n_top_matches_in_graph=20,
                                                        filter_min_relations_for_text=0.4,
-                                                       n_top_matches_in_docx=50,
+                                                       n_matches_in_docx=50,
                                                        include_match_score_in_docx=False,
                                                        min_n_matches_in_docx=5,
                                                        save_only_docx=False):
@@ -342,7 +342,7 @@ class KpAnalysisUtils:
         min_n_similar_matches_in_graph: the minimal number of matches that match both key points when calculating the relation between them.
         n_top_matches_in_graph: number of top matches to add to the graph_data file.
         filter_min_relations_for_text: the minimal key points relation threshold, when creating the textual summaries.
-        n_top_matches_in_docx: number of top matches to write in the textual summary (docx file). Pass None for all matches.
+        n_matches_in_docx: number of top matches to write in the textual summary (docx file). Pass None for all matches.
         include_match_score_in_docx: when set to true, the match score between the sentence and the key point is added.
         min_n_matches_in_docx: remove key points with less than min_n_matches_in_docx matching sentences.
 
@@ -373,7 +373,7 @@ class KpAnalysisUtils:
 
         if not save_only_docx:
             KpAnalysisUtils.hierarchical_graph_data_to_textual_bullets(graph_data=graph_data_hierarchical, out_file=result_filename.replace('.csv', '_hierarchical_bullets.txt'))
-        save_hierarchical_graph_data_to_docx(kpa_result=kpa_result, graph_data=graph_data_hierarchical, result_filename=result_filename, n_top_matches=n_top_matches_in_docx, include_match_score=include_match_score_in_docx, min_n_matches=min_n_matches_in_docx)
+        save_hierarchical_graph_data_to_docx(kpa_result=kpa_result, graph_data=graph_data_hierarchical, result_filename=result_filename, n_matches=n_matches_in_docx, include_match_score=include_match_score_in_docx, min_n_matches=min_n_matches_in_docx)
 
     @staticmethod
     def get_hierarchical_graph_from_tree_and_subset_results(graph_data_hierarchical, kpa_result,
@@ -452,7 +452,7 @@ class KpAnalysisUtils:
     def generate_graphs_and_textual_summary_for_given_tree(hierarchical_data_file, results_file, file_suff="_from_full",
                                                            n_top_matches_in_graph=20,
                                                            filter_min_relations_for_text=0.4,
-                                                           n_top_matches_in_docx=50,
+                                                           n_matches_in_docx=50,
                                                            include_match_score_in_docx=False,
                                                            min_n_matches_in_docx=5,
                                                            save_only_docx=False):
@@ -473,7 +473,7 @@ class KpAnalysisUtils:
                                                         results_file = results_file, file_suff = file_suff,
                                                         n_top_matches_in_graph = n_top_matches_in_graph,
                                                         filter_min_relations_for_text = filter_min_relations_for_text,
-                                                        n_top_matches_in_docx = n_top_matches_in_docx,
+                                                        n_matches_in_docx = n_matches_in_docx,
                                                         include_match_score_in_docx = include_match_score_in_docx,
                                                         min_n_matches_in_docx = min_n_matches_in_docx,
                                                         save_only_docx = save_only_docx)
@@ -483,7 +483,7 @@ class KpAnalysisUtils:
                                                            results_file, file_suff="_from_full",
                                                            n_top_matches_in_graph=20,
                                                            filter_min_relations_for_text=0.4,
-                                                           n_top_matches_in_docx=50,
+                                                           n_matches_in_docx=50,
                                                            include_match_score_in_docx=False,
                                                            min_n_matches_in_docx=5,
                                                            save_only_docx=False):
@@ -506,6 +506,6 @@ class KpAnalysisUtils:
 
         save_hierarchical_graph_data_to_docx(kpa_result=kpa_result, graph_data=new_hierarchical_graph_data,
                                              result_filename=results_file,
-                                             n_top_matches=n_top_matches_in_docx,
+                                             n_matches=n_matches_in_docx,
                                              include_match_score=include_match_score_in_docx,
                                              min_n_matches=min_n_matches_in_docx, file_suff=file_suff)

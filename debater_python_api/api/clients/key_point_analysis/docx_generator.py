@@ -1,4 +1,5 @@
 import logging
+import random
 
 import docx
 from docx.enum.dml import MSO_THEME_COLOR_INDEX
@@ -118,7 +119,11 @@ def add_data_stats(dicts, nodes_ids, document, stance, min_n_matches):
     run.font.size = Pt(12)
 
 
-def save_hierarchical_graph_data_to_docx(kpa_result: KpaResult, graph_data, result_filename, n_top_matches=None, sort_by_subtree=True, include_match_score=False, min_n_matches=5, file_suff=""):
+def sample_list_keep_order(list_to_sample, n_to_sample):
+    return [list_to_sample[i] for i in sorted(random.sample(range(len(list_to_sample)), n_to_sample))]
+
+
+def save_hierarchical_graph_data_to_docx(kpa_result: KpaResult, graph_data, result_filename, n_matches=None, sort_by_subtree=True, include_match_score=False, min_n_matches=5, file_suff=""):
     def get_hierarchical_bullets_aux(document, id_to_kids, id_to_node, id, tab, id_to_paragraph, id_to_n_matches_subtree, sort_by_subtree=True, ids_order=[]):
         bullet = '\u25E6' if tab % 2 == 1 else '\u2022'
         msg = f'{("   " * tab)} {bullet} '
@@ -221,10 +226,10 @@ def save_hierarchical_graph_data_to_docx(kpa_result: KpaResult, graph_data, resu
 
     logging.info('Creating key points matches tables')
 
-    if n_top_matches is None:
+    if n_matches is None:
         heading = document.add_heading(f'\n\nAll matches per key point', 1)
     else:
-        heading = document.add_heading(f'\n\nTop {n_top_matches} matches per key point', 1)
+        heading = document.add_heading(f'\n\nTop {n_matches} matches per key point', 1)
     set_heading(heading)
 
     id_to_paragraph2 = {}
@@ -237,8 +242,8 @@ def save_hierarchical_graph_data_to_docx(kpa_result: KpaResult, graph_data, resu
         id_to_paragraph2[id] = heading
 
         matches_dicts = kp_to_dicts[kp]
-        if n_top_matches is not None and n_top_matches < len(kp_to_dicts[kp]):
-            matches_dicts = matches_dicts[:n_top_matches]
+        if n_matches is not None and n_matches < len(kp_to_dicts[kp]):
+            matches_dicts = sample_list_keep_order(matches_dicts, n_matches)
 
         logging.info(f'creating table for KP: {kp}, n_matches: {len(matches_dicts)}')
 
