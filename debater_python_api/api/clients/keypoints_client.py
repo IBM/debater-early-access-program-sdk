@@ -23,13 +23,15 @@ class KpAnalysisClient(AbstractClient):
     '''
     A client for the Key Point Analysis (KPA) service.
     '''
-    def __init__(self, apikey: str, host: Optional[str]=None):
+    def __init__(self, apikey: str, host: Optional[str] = None, allow_self_signed_certificates: Optional[bool] = False):
         '''
         :param apikey: user's api-key, should be retreived from the early-access-program site.
         :param host: optional, enable switching to alternative services.
+        :param allow_self_signed_certificates: optional, enable self-signed TLS certificate, default False
         '''
         AbstractClient.__init__(self, apikey)
         self.host = host if host is not None else 'https://keypoint-matching-backend.debater.res.ibm.com'
+        self.allow_self_signed_certs = allow_self_signed_certificates
 
     def _delete(self, url, params, timeout=300, retries=10, headers=None):
         return self._run_request_with_retry(requests.delete, url, params, timeout, retries, headers)
@@ -48,10 +50,11 @@ class KpAnalysisClient(AbstractClient):
         logging.info('client calls service (%s): %s' % (func.__name__, url))
         while True:
             try:
+                verify_cert = not self.allow_self_signed_certs
                 if func.__name__ == 'post':
-                    resp = func(url, json=params, headers=headers, timeout=timeout)
+                    resp = func(url, json=params, headers=headers, timeout=timeout, verify=verify_cert)
                 else:
-                    resp = func(url, params=params, headers=headers, timeout=timeout)
+                    resp = func(url, params=params, headers=headers, timeout=timeout, verify=verify_cert)
                 if resp.status_code == 200:
                     return resp.json()
                 if resp.status_code == 422:
