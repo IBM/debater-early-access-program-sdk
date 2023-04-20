@@ -265,40 +265,36 @@ class KpAnalysisClient(AbstractClient):
         '''
         return self._delete(self.host + kp_extraction_endpoint, {'job_id': job_id})
 
-    def cancel_all_extraction_jobs_for_domain(self, domain: str, clear_kp_analysis_jobs_log: bool = False):
+    def cancel_all_extraction_jobs_for_domain(self, domain: str):
         '''
         Stops all running jobs and cancels all pending jobs in a domain.
         :param domain: the name of the domain.
-        :param clear_kp_analysis_jobs_log: When set to True, clears all jobs in this domain from the jobs-history in the user-report (useful when the report becomes too long).
         :return: the request's response
         '''
-        return self._delete(self.host + data_endpoint, {'domain': domain, 'clear_kp_analysis_jobs_log': clear_kp_analysis_jobs_log, 'clear_db': False})
+        return self._delete(self.host + data_endpoint, {'domain': domain, 'clear_kp_analysis_jobs_log': False, 'clear_db': False})
 
-    def cancel_all_extraction_jobs_all_domains(self, clear_kp_analysis_jobs_log: bool = False):
+    def cancel_all_extraction_jobs_all_domains(self):
         '''
         Stops all running jobs and cancels all pending jobs in all domains.
-        :param clear_kp_analysis_jobs_log: When set to True, also clears all jobs (in all domains) from the jobs-history in the user-report (useful when the repots becomes too long).
         :return: the request's response
         '''
-        return self._delete(self.host + data_endpoint, {'clear_kp_analysis_jobs_log': clear_kp_analysis_jobs_log, 'clear_db': False})
+        return self._delete(self.host + data_endpoint, {'clear_kp_analysis_jobs_log': False, 'clear_db': False})
 
-    def delete_domain_cannot_be_undone(self, domain: str, clear_kp_analysis_jobs_log: bool = False):
+    def delete_domain_cannot_be_undone(self, domain: str):
         '''
         Deletes a domain. Stops all running jobs and cancels all pending jobs in a domain. Erases the data (comments and sentences) in a domain and clears the domain's cache.
         When uploaded comments in a domain need to be replaced, first delete the domain and then upload the updated comments.
         :param domain: the name of the domain
-        :param clear_kp_analysis_jobs_log: When set to True, also clears all jobs in the domain from the jobs-history in the user-report (useful when the repots becomes too long).
         :return: the request's response
         '''
-        return self._delete(self.host + data_endpoint, {'domain': domain, 'clear_kp_analysis_jobs_log': clear_kp_analysis_jobs_log, 'clear_db': True})
+        return self._delete(self.host + data_endpoint, {'domain': domain, 'clear_kp_analysis_jobs_log': False, 'clear_db': True})
 
-    def delete_all_domains_cannot_be_undone(self, clear_kp_analysis_jobs_log: bool = False):
+    def delete_all_domains_cannot_be_undone(self):
         '''
         Deletes all user's domains. Stops all running jobs and cancels all pending jobs in all domains. Erases the data (comments and sentences) in all domains and clears all domains' caches.
-        :param clear_kp_analysis_jobs_log: When set to True, also clears all jobs (in all domains) from the jobs-history in the user-report (useful when the repots becomes too long).
         :return: the request's response
         '''
-        return self._delete(self.host + data_endpoint, {'clear_kp_analysis_jobs_log': clear_kp_analysis_jobs_log, 'clear_db': True})
+        return self._delete(self.host + data_endpoint, {'clear_kp_analysis_jobs_log': False, 'clear_db': True})
 
     def get_full_report(self, days_ago=30):
         '''
