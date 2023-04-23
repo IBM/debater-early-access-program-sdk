@@ -184,25 +184,7 @@ def hierarchical_graph_data_to_textual_bullets(graph_data_json_file=None, graph_
     return bullets_txt
 
 
-def generate_graphs_and_textual_summary(result_file, min_n_similar_matches_in_graph=5,
-                                        n_top_matches_in_graph=20,
-                                        filter_min_relations_for_text=0.4,
-                                        n_matches_in_docx=50,
-                                        include_match_score_in_docx=False,
-                                        min_n_matches_in_docx=5,
-                                        save_only_docx=False):
-    kpa_result = KpaResult.create_from_result_csv(result_file)
-    generate_graphs_and_textual_summary_kpa_result(kpa_result, result_filename=result_file,
-                                                                   min_n_similar_matches_in_graph=min_n_similar_matches_in_graph,
-                                                                   n_top_matches_in_graph=n_top_matches_in_graph,
-                                                                   filter_min_relations_for_text=filter_min_relations_for_text,
-                                                                   n_matches_in_docx=n_matches_in_docx,
-                                                                   include_match_score_in_docx=include_match_score_in_docx,
-                                                                   min_n_matches_in_docx=min_n_matches_in_docx,
-                                                                   save_only_docx=save_only_docx)
-
-
-def generate_graphs_and_textual_summary_kpa_result(kpa_result: KpaResult, result_filename,
+def generate_graphs_and_textual_summary(kpa_result: KpaResult, result_filename,
                                                    min_n_similar_matches_in_graph=5,
                                                    n_top_matches_in_graph=20,
                                                    filter_min_relations_for_text=0.4,
@@ -327,37 +309,7 @@ def get_hierarchical_graph_from_tree_and_subset_results(graph_data_hierarchical,
     return new_nodes + edges
 
 
-def generate_graphs_and_textual_summary_for_given_tree(hierarchical_data_file, results_file, file_suff="_from_full",
-                                                       n_top_matches_in_graph=20,
-                                                       filter_min_relations_for_text=0.4,
-                                                       n_matches_in_docx=50,
-                                                       include_match_score_in_docx=False,
-                                                       min_n_matches_in_docx=5,
-                                                       save_only_docx=False):
-    '''
-    Create hierarchical results for results_file, using a precalculated hierarchical results hierarchical_data_file.
-    This is useful when we first create hierarchical_data_file using the whole data, and then want to calculate the
-    hierarchical result of its subset while considering the already existing hierarchy generated over the whole data.
-    For example, when we have a large survey, we can first run over the entire data using the method
-    generate_graphs_and_textual_summary method to create a hierarchical representation of the results. Then when we
-    want to evaluate a subset of the survey we can run over a subset of the survey and when we create its
-    hierarchical representation we will use the hierarchical_data_file of the full survey.
-    '''
-
-    kpa_result = KpaResult.create_from_result_csv(results_file)
-    generate_graphs_and_textual_summary_for_given_tree_kpa_result(
-        hierarchical_data_file,
-        kpa_result=kpa_result,
-        results_file=results_file, file_suff=file_suff,
-        n_top_matches_in_graph=n_top_matches_in_graph,
-        filter_min_relations_for_text=filter_min_relations_for_text,
-        n_matches_in_docx=n_matches_in_docx,
-        include_match_score_in_docx=include_match_score_in_docx,
-        min_n_matches_in_docx=min_n_matches_in_docx,
-        save_only_docx=save_only_docx)
-
-
-def generate_graphs_and_textual_summary_for_given_tree_kpa_result(hierarchical_data_file, kpa_result: KpaResult,
+def generate_graphs_and_textual_summary_for_given_tree(hierarchical_data_file, kpa_result: KpaResult,
                                                                   results_file, file_suff="_from_full",
                                                                   n_top_matches_in_graph=20,
                                                                   filter_min_relations_for_text=0.4,
@@ -365,6 +317,15 @@ def generate_graphs_and_textual_summary_for_given_tree_kpa_result(hierarchical_d
                                                                   include_match_score_in_docx=False,
                                                                   min_n_matches_in_docx=5,
                                                                   save_only_docx=False):
+    '''
+    Create hierarchical results for kpa_result, using a precalculated hierarchical results hierarchical_data_file.
+    This is useful when we first create hierarchical_data_file using the whole data, and then want to calculate the
+    hierarchical result of its subset while considering the already existing hierarchy generated over the whole data.
+    For example, when we have a large survey, we can first run over the entire data using the method
+    generate_graphs_and_textual_summary method to create a hierarchical representation of the results. Then when we
+    want to evaluate a subset of the survey we can run over a subset of the survey and when we create its
+    hierarchical representation we will use the hierarchical_data_file of the full survey.
+    '''
     with open(hierarchical_data_file, "r") as f:
         graph_data_hierarchical = json.load(f)
 
