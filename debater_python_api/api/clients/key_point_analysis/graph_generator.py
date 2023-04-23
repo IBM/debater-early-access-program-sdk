@@ -12,7 +12,8 @@ def create_graph_data(kpa_result: KpaResult, min_n_similar_matches=5, n_matches_
     translates the result file (full result, not the summary) into a json that is loadable in the kpa-key-points-graph-ui
     :param kpa_result: a KpaResult instance
     :param min_n_similar_matches: minimal number of sentences in the key points intersection for creating an edge (relation between the key points).
-    :return: creates a new json file (located near result_file with a new suffix).
+    :paran n_matches_samples: maximal number of matching sentences to include for each key point
+    :return: a json object with the graph data.
     '''
 
     def graph_to_graph_data(graph, n_sentences):
@@ -193,7 +194,8 @@ def generate_graphs_and_textual_summary(kpa_result: KpaResult, result_filename,
                                                    min_n_matches_in_docx=5,
                                                    save_only_docx=False):
     '''
-    result_file: the ..._result.csv that is saved using write_result_to_csv method.
+    kpa_result: the KpaResult object holding the results
+    result_filename: the ..._result.csv that is saved using write_result_to_csv method.
     min_n_similar_matches_in_graph: the minimal number of matches that match both key points when calculating the relation between them.
     n_top_matches_in_graph: number of top matches to add to the graph_data file.
     filter_min_relations_for_text: the minimal key points relation threshold, when creating the textual summaries.

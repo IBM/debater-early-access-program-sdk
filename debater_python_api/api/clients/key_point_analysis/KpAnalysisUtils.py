@@ -53,46 +53,6 @@ class KpAnalysisUtils:
                 logging.info(f'    Job: {str(kp_analysis_status)}')
 
     @staticmethod
-    def set_stance_to_result(result, stance):
-        for keypoint_matching in result['keypoint_matchings']:
-            keypoint_matching['stance'] = stance
-        return result
-
-    @staticmethod
-    def merge_two_results(result1, result2):
-        result = {'keypoint_matchings': result1['keypoint_matchings'] + result2['keypoint_matchings']}
-        result['keypoint_matchings'].sort(key=lambda matchings: len(matchings['matching']), reverse=True)
-        return result
-
-    @staticmethod
-    def write_result_to_csv(result_json, result_file, also_hierarchy=True):
-        '''
-        Writes the key point analysis result to file.
-        Creates two files:
-        * matches file: a file with all sentence-key point matches, saved in result_file path.
-        * summary file: a summary file with all key points and their aggregated information, saved in result_file path with suffix: _kps_summary.csv.
-        :param result: the result, returned by method get_result in KpAnalysisTaskFuture.
-        :param result_file: a path to the file that will be created (should have a .csv suffix, otherwise it will be added).
-        '''
-        if 'keypoint_matchings' not in result_json:
-            logging.info("No keypoint matchings results")
-            return
-
-        kpa_result = KpaResult.create_from_result_json(result_json)
-        kpa_result.write_to_file(result_file, also_hierarchy)
-
-    @staticmethod
-    def compare_results(result_1, result_2, title_1='result1', title_2='result2'):
-        kpa_results_1 = KpaResult.create_from_result_json(result_1, name=title_1)
-        kpa_results_2 = KpaResult.create_from_result_json(result_2, name=title_2)
-        return kpa_results_1.compare_with_other(kpa_results_2)
-
-    @staticmethod
-    def print_result(result_json, n_sentences_per_kp, title):
-        KpaResult.create_from_result_json(result_json).print_result(n_sentences_per_kp=n_sentences_per_kp,
-                                                                    title=title)
-
-    @staticmethod
     def write_sentences_to_csv(sentences, out_file):
         def get_selected_stance(r):
             stance_dict = dict(r["stance_dict"])
