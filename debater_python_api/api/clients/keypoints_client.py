@@ -4,6 +4,8 @@ import calendar
 import traceback
 
 import requests
+
+from KpaResult import KpaResult
 from debater_python_api.api.clients.abstract_client import AbstractClient
 from debater_python_api.utils.general_utils import get_default_request_header
 from typing import List, Optional, Dict
@@ -362,7 +364,7 @@ class KpAnalysisTaskFuture:
         :param wait_secs: limit the waiting time (in seconds).
         :param polling_timout_secs: sets the time to wait before polling again (in seconds). The default is 60 seconds.
         :param high_verbosity: set to False to reduce the number of messages printed to the logger.
-        :return: the key point analysis job result or throws an exception if an error occurs.
+        :return: the KpaResult object or throws an exception if an error occurs.
         '''
         start_time = time.time()
 
@@ -379,7 +381,8 @@ class KpAnalysisTaskFuture:
                     self._print_progress_bar(progress)
             elif result['status'] == 'DONE':
                 logging.info('job_id %s is done, returning result' % self.job_id)
-                return result['result']
+                json_results = result['result']
+                return KpaResult.create_from_result_json(json_results)
             elif result['status'] == 'ERROR':
                 error_msg = 'job_id %s has error, error_msg: %s' % (self.job_id, str(result['error_msg']))
                 logging.error(error_msg)
