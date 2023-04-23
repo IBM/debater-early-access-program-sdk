@@ -306,6 +306,24 @@ class KpAnalysisClient(AbstractClient):
         logging.info(res['msg'])
         return res['sentences_results']
 
+    def create_domain_ignore_exists(self, domain, domain_params):
+        try:
+            self.create_domain(domain, domain_params)
+            logging.info(f'domain: {domain} was created')
+        except KpaIllegalInputException as e:
+            if 'already exist' not in str(e):
+                raise e
+            logging.info(f'domain: {domain} already exists, domain_params are NOT updated.')
+
+    def delete_domain_ignore_doesnt_exist(self, domain):
+        try:
+            self.delete_domain_cannot_be_undone(domain)
+            logging.info(f'domain: {domain} was deleted')
+        except KpaIllegalInputException as e:
+            if 'doesn\'t have domain' not in str(e):
+                raise e
+            logging.info(f'domain: {domain} doesn\'t exist.')
+
 
 class KpAnalysisTaskFuture:
     '''

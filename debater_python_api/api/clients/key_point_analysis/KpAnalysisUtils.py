@@ -130,26 +130,6 @@ class KpAnalysisUtils:
         log.addHandler(console_handler)
 
     @staticmethod
-    def create_domain_ignore_exists(client, domain, domain_params):
-        try:
-            client.create_domain(domain, domain_params)
-            logging.info(f'domain: {domain} was created')
-        except KpaIllegalInputException as e:
-            if 'already exist' not in str(e):
-                raise e
-            logging.info(f'domain: {domain} already exists, domain_params are NOT updated.')
-
-    @staticmethod
-    def delete_domain_ignore_doesnt_exist(client, domain):
-        try:
-            client.delete_domain_cannot_be_undone(domain)
-            logging.info(f'domain: {domain} was deleted')
-        except KpaIllegalInputException as e:
-            if 'doesn\'t have domain' not in str(e):
-                raise e
-            logging.info(f'domain: {domain} doesn\'t exist.')
-
-    @staticmethod
     def create_graph_data(kpa_result: KpaResult, min_n_similar_matches=5, n_matches_samples=20):
         '''
         translates the result file (full result, not the summary) into a json that is loadable in the kpa-key-points-graph-ui
