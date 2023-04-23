@@ -78,18 +78,12 @@ class KpAnalysisClient(AbstractClient):
         return isinstance(lst, list) and len([a for a in lst if not isinstance(a, str)]) == 0
 
     def create_domain(self, domain, domain_params=None):
-        '''
+        """
         Create a new domain and customize domain's parameters.
-        By default, comments that are uploaded into a domain are over go minor cleansing and then split into sentences.
-        However, sometimes users have better domain-knowledge and prefer to handle their data themselves.
-        Therefore, users that want to clean their comments and split them into sentences can use the dont_split parameter and set it to True,
-        and the uploaded comments will be kept as is.
         :param domain: the name of the new domain (must not exist already)
-        :param domain_params: a dictionary with various parameters for the domain. Supported values:
-        * dont_split: (Boolean, set to False by default), when set to True, the comments uploaded to the domain will not be cleaned and not be split into sentences.
-        * do_stance_analysis: (Boolean, set to False by default), when set to True, stance (positive, negative, neutral, suggestion) is calculated for all sentences (needed when we want to run on each stance seperatly).
-        * do_kp_quality: (Boolean, set to False by default), When set to true, keypoint quality is calculated for all sentences (needed when we want to use the kp_quality model for key point selection).
-        '''
+        :param domain_params: a dictionary with various parameters for the domain. For full documentation of the domain
+        params see https://github.com/IBM/debater-eap-tutorial/blob/main/survey_usecase/kpa_parameters.pdf
+        """
         body = {'domain': domain}
         if domain_params is not None:
             body['domain_params'] = domain_params
@@ -159,31 +153,15 @@ class KpAnalysisClient(AbstractClient):
 
     def start_kp_analysis_job(self, domain: str, comments_ids: Optional[List[str]]=None,
                               run_params=None, description: Optional[str]=None) -> 'KpAnalysisTaskFuture':
-        '''
-        Starts a Key Point Analysis (KPA) job in an async manner. Please make sure all comments had already been uploaded into a domain and processed before starting a new job (using the wait_till_all_comments_are_processed method).
-          * By default it runs over all comments in the domain. In order to run only on a subset of the comments in the domain, pass their ids in the comment_ids param.
-          * It is also possible to add a job description. This description will later be visible in the user-report.
-          * Every domain has a cache. When running a new job, only the delta from previous jobs in the same domain is calculated.
-          * Different parameters that affect the job and its result can be passed in the run_params parameter:
-              * keypoints (List of strings, empty by default): When keypoints are provided the service matches the sentences to the given keypoints instead of extracting them automatically.
-              This enables a human-in-the-loop scenario, where the automatically extracted key points are reviewed by the user, and the sentences are then remapped to the revised keypoints.
-              * keypoints_by_job_id (String, empty by default): It is also possible to use key points from a previous job by suppling the job_id in the keypoints_by_job_id param.
-              Note that only one of the keypoints and keypoints_by_job_id params can be used, not both.
-              * arg_min_len (Integer, set to 4 by default): Filter shorter sentences (by number of tokens).
-              * arg_max_len (Integer, set to 36 by default): Filter longer sentences (by number of tokens).
-              * arg_relative_aq_threshold (Float in [0.0,1.0], set to 1.0 by default): Filter sentences having a quality score below this precentile (useful to filter out low quality data in the data-set).
-              * mapping_policy (String in ["STRICT","NORMAL","LOOSE"], "NORMAL" by default): Policy for determining if an argument is matched to a key point: for “STRICT”, only pairs with high matching
-              scores are considered matched, leading to a higher precision and a lower coverage, and vice versa for "LOOSE".
-              * sentence_to_multiple_kps (Boolean, False by default): When True, a sentence is matched to all key points with score above threshold. Otherwise only to one key point with highest match score above threshold.
-              * n_top_kps (Integer, default is set by an internal algorithm): Number of key points to generate. Lower value will make the job finish faster. All sentences are re-mapped to these key point.
-              * kp_relative_aq_threshold (Float in [0.0,1.0], set to 0.65 by default): Sentences having AQ score below this precentile will not be selected as key point candidates.
-              * invalid_kps_comment_ids (String list, empty by default): A list of comment_ids who’s sentences should not be selected as key point candidates.
+        """
+        Starts a Key Point Analysis (KPA) job in an async manner. Please make sure all comments had already been
+        uploaded into a domain and processed before starting a new job (using the wait_till_all_comments_are_processed method).
         :param domain: the name of the domain
         :param comments_ids: when None is passed, it uses all comments in the domain (typical usage) otherwise it only uses the comments according to the provided list of comment_ids.
-        :param run_params: a dictionary with different parameters and their values (see description above). e.g. run_param={'arg_min_len': 5, 'arg_max_len': 40, 'mapping_threshold': 0.0}
-        :param description: add a description to a job so it will be easy to detecte it in the user-report.
+        :param run_params: a dictionary with different parameters and their values. For full documentation of supported run_params see https://github.com/IBM/debater-eap-tutorial/blob/main/survey_usecase/kpa_parameters.pdf
+        :param description: add a description to a job so it will be easy to detect it in the user-report.
         :return: KpAnalysisTaskFuture: an object that enables the retrieval of the results in an async manner.
-        '''
+        """
 
         # TODO validate run_params
         body = {'domain': domain}
