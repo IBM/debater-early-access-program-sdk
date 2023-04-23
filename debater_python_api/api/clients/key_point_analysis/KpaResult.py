@@ -1,4 +1,5 @@
 import ast
+import json
 import logging
 import math
 from collections import defaultdict
@@ -11,12 +12,14 @@ from debater_python_api.api.clients.key_point_analysis.utils import read_dicts_f
 
 
 class KpaResult:
-    def __init__(self, result_json, result_df, summary_df, hierarchy_df, name=None):
+    def __init__(self, result_json, result_df, name=None):
         self.result_json = result_json
         self.result_df = result_df
-        self.summary_df = summary_df
-        self.hierarchy_df = hierarchy_df
         self.name = name if name else "kpa_results"
+
+    def to_json_file(self, json_file):
+        with open(json_file, 'w') as f:
+            json.dump(self.result_json, f)
 
     @staticmethod
     def result_json_to_result_df(result):
@@ -60,16 +63,15 @@ class KpaResult:
             matchings_cols.append('kp_stance')
         return pd.DataFrame(matchings_rows, columns=matchings_cols)
 
-    @staticmethod
-    def result_df_to_summary_df(result_df):
-        dicts, _ = read_dicts_from_df(result_df)
+    def result_df_to_summary_df(self):
+        dicts, _ = read_dicts_from_df(self.result_df)
         if len(dicts) == 0:
             logging.info("No key points in results")
             return None
 
         kp_to_dicts = create_dict_to_list([(d['kp'], d) for d in dicts])
 
-        total_sentences = KpaResult.get_number_of_unique_sentences_for_csv_results(result_df)
+        total_sentences = self.get_number_of_unique_sentences()
 
         all_comment_ids = set([d["comment_id"] for d in dicts])
         total_comments = len(all_comment_ids)
@@ -114,33 +116,6 @@ class KpaResult:
         return pd.DataFrame(summary_rows, columns=summary_cols)
 
     @staticmethod
-    def update_dataframes_with_hierarchical_results(result_df, summary_df):
-        '''
-        Updates the summary_df with a summary of the hierarchical data
-        and returns the hierarchy_df dataframe with more elaborated hierarchical results.
-        '''
-        dicts, _ = read_dicts_from_df(result_df)
-
-        hierarchy_df = None
-        kp_to_parent = {d['kp']: d.get("parent", 'root') for d in dicts}
-        if len(set(kp_to_parent.values())) > 1:
-            summary_df.loc[:, "parent"] = summary_df.apply(lambda x: kp_to_parent[x["kp"]], axis=1)
-            parent_to_kps = {p: list(filter(lambda x: kp_to_parent[x] == p, kp_to_parent.keys()))
-                             for p in set(kp_to_parent.values())}
-            parent_to_kps.update({p: [] for p in set(parent_to_kps["root"]).difference(parent_to_kps.keys())})
-            kp_to_n_args = dict(zip(summary_df["kp"], summary_df["#sentences"]))
-            kp_to_n_args_sub = {kp: np.sum([kp_to_n_args[c_kp] for c_kp in set(parent_to_kps.get(kp, []) + [kp])])
-                                for kp in kp_to_parent}
-            kp_to_n_args_sub["root"] = np.sum(list(summary_df["#sentences"]))
-            summary_df.loc[:, "#sents_in_subtree"] = summary_df.apply(lambda x: kp_to_n_args_sub[x["kp"]], axis=1)
-
-            hierarchy_data = [[p, len(parent_to_kps[p]), kp_to_n_args_sub[p], parent_to_kps[p]] for p in parent_to_kps]
-            hierarchy_df = pd.DataFrame(hierarchy_data,
-                                        columns=["top_kp", "#level_2_kps", "#sents_in_subtree", "level_2_kps"])
-            hierarchy_df.sort_values(by=["#sents_in_subtree"], ascending=False, inplace=True)
-        return summary_df, hierarchy_df
-
-    @staticmethod
     def result_df_to_result_json(result_df):
         kp_to_matches = defaultdict(list)
         dicts, _ = read_dicts_from_df(result_df)
@@ -183,37 +158,28 @@ class KpaResult:
 
     @staticmethod
     def create_from_result_json(result_json, name=None):
-        if 'keypoint_matchings' not in result_json:
+        if 'keypoint_matchings' not in result_json: #todo send error??
             logging.info("No keypoint matchings results")
             return KpaResult(result_json, None, None, None, name)
         else:
             result_df = KpaResult.result_json_to_result_df(result_json)
-            summary_df = KpaResult.result_df_to_summary_df(result_df)
-            summary_df, hierarchy_df = KpaResult.update_dataframes_with_hierarchical_results(result_df, summary_df)
-            return KpaResult(result_json, result_df, summary_df, hierarchy_df, name)
+            return KpaResult(result_json, result_df, name)
 
     @staticmethod
     def create_from_result_csv(result_csv, name=None):
         result_df = pd.read_csv(result_csv)
         result_json = KpaResult.result_df_to_result_json(result_df)
-        summary_df = KpaResult.result_df_to_summary_df(result_df)
-        summary_df, hierarchy_df = KpaResult.update_dataframes_with_hierarchical_results(result_df, summary_df)
-        return KpaResult(result_json, result_df, summary_df, hierarchy_df, name)
+        return KpaResult(result_json, result_df, name)
 
-    def write_to_file(self, result_file, also_hierarchy=True):
+    def write_to_csv_file(self, result_file):
         if '.csv' not in result_file:
             result_file += '.csv'
 
-        if self.result_df is not None:
-            write_df_to_file(self.result_df, result_file)
+        write_df_to_file(self.result_df, result_file)
 
-        if self.summary_df is not None:
-            summary_file = result_file.replace(".csv", "_kps_summary.csv")
-            write_df_to_file(self.summary_df, summary_file)
-
-        if also_hierarchy and self.hierarchy_df is not None:
-            hierarchy_file = result_file.replace(".csv", "_kps_hierarchy.csv")
-            write_df_to_file(self.hierarchy_df, hierarchy_file)
+        summary_df = self.result_df_to_summary_df()
+        summary_file = result_file.replace(".csv", "_kps_summary.csv")
+        write_df_to_file(summary_df, summary_file)
 
     def print_result(self, n_sentences_per_kp, title):
         '''
@@ -295,22 +261,13 @@ class KpaResult:
         return f"{sentence_dict['comment_id']}_{sentence_dict['sentence_id']}"
 
     def get_number_of_unique_sentences(self, include_unmatched=True):
-        return KpaResult.get_number_of_unique_sentences_for_json_results(self.result_json, include_unmatched)
-
-    @staticmethod
-    def get_number_of_unique_sentences_for_json_results(result_json, include_unmatched=True):
         total_sentences = set()
-        for i, keypoint_matching in enumerate(result_json['keypoint_matchings']):
+        for i, keypoint_matching in enumerate(self.result_json['keypoint_matchings']):
             matches = keypoint_matching['matching']
             matching_sents_ids = set([KpaResult.get_unique_sent_id(d) for d in matches])
             if keypoint_matching['keypoint'] != 'none' or include_unmatched:
                 total_sentences = total_sentences.union(matching_sents_ids)
         return len(total_sentences)
-
-    @staticmethod
-    def get_number_of_unique_sentences_for_csv_results(result_df, include_unmatched=True):
-        result_json = KpaResult.result_df_to_result_json(result_df)
-        return KpaResult.get_number_of_unique_sentences_for_json_results(result_json, include_unmatched)
 
     def get_kp_to_n_matched_sentences(self, include_none=True):
         kps_n_args = {kp['keypoint']: len(kp['matching']) for kp in self.result_json['keypoint_matchings']
@@ -354,3 +311,13 @@ class KpaResult:
             rows.append([kp, '---', '---', sents2, f'{percent2:.2f}%', '---', '---'])
         comparison_df = pd.DataFrame(rows, columns=cols)
         return comparison_df
+
+    def merge_with_other(self, other_results):
+        combined_results_json = {'keypoint_matchings': self.result_json['keypoint_matchings'] + other_results.result_json['keypoint_matchings']}
+        combined_results_json['keypoint_matchings'].sort(key=lambda matchings: len(matchings['matching']), reverse=True)
+        return KpaResult.create_from_result_json(result_json = combined_results_json)
+
+    def set_stance_to_result(self, stance):
+        for keypoint_matching in self.result_json['keypoint_matchings']:
+            keypoint_matching['stance'] = stance
+        self.result_df["stance"] = stance
