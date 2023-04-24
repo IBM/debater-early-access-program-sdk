@@ -3,6 +3,8 @@ import time
 import calendar
 import traceback
 
+import pandas as pd
+from utils import update_row_with_stance_data
 import requests
 
 from KpaResult import KpaResult
@@ -359,12 +361,21 @@ class KpAnalysisClient(AbstractClient):
         Uploaded comments are cleaned and splitted into sentences. This method retrieves the sentences in a domain.
         :param domain: the name of the domain.
         :param job_id: when provided, it will only return the sentences used in a specific key point analysis job.
-        :return: a dictionary with all the sentences' details.
+        :return: a dataframe with all the sentences' details.
         '''
         res = self._get(self.host + data_endpoint, {'domain': domain, 'get_sentences': True, 'job_id': job_id})
         logging.info(res['msg'])
-        return res['sentences_results']
+        sentences = res['sentences_results']
+        if len(sentences) == 0:
+            logging.info(f"No sentences found, returning empty dataframe.")
+            return pd.DataFrame()
 
+        cols = list(sentences[0].keys())
+        rows = [[s[col] for col in cols] for s in sentences]
+        df = pd.DataFrame(rows, columns=cols)
+        if "stance_dict" in cols and sentences[0]["stance_dict"]:
+            df = df.apply(lambda r: update_row_with_stance_data(r), axis=1)
+        return df
 
 class KpAnalysisTaskFuture:
     '''
