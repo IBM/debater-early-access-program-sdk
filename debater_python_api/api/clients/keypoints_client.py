@@ -79,19 +79,34 @@ class KpAnalysisClient(AbstractClient):
     def _is_list_of_strings(self, lst):
         return isinstance(lst, list) and len([a for a in lst if not isinstance(a, str)]) == 0
 
-    def create_domain(self, domain, domain_params=None):
+    def create_domain(self, domain, domain_params=None, ignore_exists = False):
         """
         Create a new domain and customize domain's parameters.
         :param domain: the name of the new domain (must not exist already)
-        :param domain_params: a dictionary with various parameters for the domain. For full documentation of the domain
+        :param domain_params: a dictionary with various parameters for the domain.
+        For full documentation of the domain
         params see https://github.com/IBM/debater-eap-tutorial/blob/main/survey_usecase/kpa_parameters.pdf
+        :param ignore_exists: optional, default False. If the domain already exists - if True, keeps existing domain.
+        If False, raises an exception.
         """
-        body = {'domain': domain}
-        if domain_params is not None:
-            body['domain_params'] = domain_params
+        try:
+            body = {'domain': domain}
+            if domain_params is not None:
+                body['domain_params'] = domain_params
+            self._post(url=self.host + domains_endpoint, body=body)
+            logging.info('created domain: %s with domain_params: %s' % (domain, str(domain_params)))
+        except KpaIllegalInputException as e:
+            if 'already exist' not in str(e): # or not ignore_exists:
+                raise e
+            if not ignore_exists:
+                raise KpaIllegalInputException(f'domain: {domain} already exists. To run on a new domain, please either select another '
+                             f'domain name or delete this domain first by running client.delete_domain_cannot_be_undone({domain}).'
+                             f'To allow running on an existing domain set ignore_exists=True ')
 
-        self._post(url=self.host + domains_endpoint, body=body)
-        logging.info('created domain: %s with domain_params: %s' % (domain, str(domain_params)))
+            logging.info(f'domain: {domain} already exists, domain_params are NOT updated.')
+
+
+
 
 
     def upload_comments(self, domain: str, comments_ids: List[str], comments_texts: List[str], batch_size: int = 2000) -> None:
@@ -207,30 +222,64 @@ class KpAnalysisClient(AbstractClient):
 
         return self._get(self.host + kp_extraction_endpoint, params, timeout=180)
 
-    def run(self, comments_texts: List[str], comments_ids: Optional[List[str]]=None):
-        '''
-        This is the simplest way to use the Key Point Analysis system.
-        This method uploads the comments into a temporary domain, waits for them to be processed, starts a Key Point Analysis job using all comments (auto key points extraction with default parameters), and waits for the results. Eventually, the domain is deleted.
-        It is possible to use this method for up to 1000 comments. For longer jobs, please run the system in a stagged manner (upload the comments yourself, start a job etc').
-        :param comments_texts: a list of comments (strings).
-        :param comments_ids: (optional) a list of comment ids (a list of strings). When not provided, dummy comment_ids will be generated (1, 2, 3,...). When provided, comment_ids must be unique, must be the same length as comments_texts and the comment_id and comment_text should match by position in the list.
-        :return: a json with the result
-        '''
-        if len(comments_texts) > 10000:
-            raise Exception('Please use the stagged mode (upload_comments, start_kp_analysis_job) for jobs with more then 10000 comments')
-
-        if comments_ids is None:
-            comments_ids = [str(i) for i in range(len(comments_texts))]
-        domain = 'run_temp_domain_' + str(calendar.timegm(time.gmtime()))
+    def run_for_domain(self, domain, comments_texts, comments_ids, run_params={}, run_per_stance=False):
         logging.info('uploading comments')
         self.upload_comments(domain, comments_ids, comments_texts)
         logging.info('waiting for the comments to be processed')
         self.wait_till_all_comments_are_processed(domain)
-        logging.info('starting the key point analysis job')
-        future = self.start_kp_analysis_job(domain)
-        logging.info('waiting for the key point analysis job to finish')
-        keypoint_matching = future.get_result(high_verbosity=True)
-        self.delete_domain_cannot_be_undone(domain)
+        if not run_per_stance:
+            logging.info('starting the key point analysis job')
+            future = self.start_kp_analysis_job(domain, run_params=run_params)
+            logging.info('waiting for the key point analysis job to finish')
+            keypoint_matching = future.get_result(high_verbosity=True)
+        else:
+            logging.info('starting the key point analysis jobs')
+            run_params_stance = run_params.copy()
+            run_params_stance["stances_to_run"] = ["pos"]
+            future_pro = self.start_kp_analysis_job(domain, run_params=run_params_stance)
+
+            run_params_stance["stances_to_run"] = ["neg", "sug"]
+            future_con = self.start_kp_analysis_job(domain, run_params=run_params_stance)
+            logging.info('waiting for the key point analysis job to finish')
+            results_pro = future_pro.get_result(high_verbosity=True)
+            results_con = future_con.get_result(high_verbosity=True)
+            results_pro.set_stance_to_result("pro")
+            results_con.set_stance_to_result("con")
+            keypoint_matching = results_pro.merge_with_other(results_con)
+        return keypoint_matching
+
+    def run(self, domain_name, comments_texts: List[str], run_per_stance = False, run_params = {}):
+        '''
+        This is the simplest way to use the Key Point Analysis system.
+        This method uploads the comments into a temporary domain, waits for them to be processed, starts a Key Point Analysis job using all comments (auto key points extraction with default parameters), and waits for the results. Eventually, the domain is deleted.
+        It is possible to use this method for up to 1000 comments. For longer jobs, please run the system in a staged manner (upload the comments yourself, start a job etc').
+        If the method ended without
+        If execution stopped before this method returned, please run client.delete_domain_cannot_be_undone(<domain_name>) #TODO DELETE???
+        :param domain_name: name of the temporary domain to store the comments. Must not be an existing domain.
+        :param comments_texts: a list of comments (strings).
+        :param run_per_stance: optional, default False. If true - performs the analysis for each stance separately and returns merged results.
+        :param run_params: optional, run_params for the run.
+        :return: a KpaResult object with the result
+        '''
+        if len(comments_texts) > 10000:
+            raise Exception('Please use the stagged mode (upload_comments, start_kp_analysis_job) for jobs with more then 10000 comments')
+
+        try:
+            self.create_domain(domain_name, domain_params={"do_stance_analysis":True})
+        except KpaIllegalInputException as e:
+            if 'already exist' not in str(e):
+                raise e
+            else:
+                raise KpaIllegalInputException(f'domain: {domain_name} already exists, please select another domain_name or delete '
+                         f'this domain first by running client.delete_domain_cannot_be_undone({domain_name})')
+
+
+        comments_ids = [str(i) for i in range(len(comments_texts))]
+        try:
+            keypoint_matching = self.run_for_domain(domain_name, comments_texts, comments_ids, run_params, run_per_stance)
+
+        finally:
+            self.delete_domain_cannot_be_undone(domain_name)
         return keypoint_matching
 
     def cancel_kp_extraction_job(self, job_id: str):
@@ -263,7 +312,15 @@ class KpAnalysisClient(AbstractClient):
         :param domain: the name of the domain
         :return: the request's response
         '''
-        return self._delete(self.host + data_endpoint, {'domain': domain, 'clear_kp_analysis_jobs_log': False, 'clear_db': True})
+        try:
+            resp = self._delete(self.host + data_endpoint, {'domain': domain, 'clear_kp_analysis_jobs_log': False, 'clear_db': True})
+            logging.info(f'domain: {domain} was deleted')
+            return resp
+        except KpaIllegalInputException as e:
+            if 'doesn\'t have domain' not in str(e):
+                raise e
+            logging.info(f'domain: {domain} doesn\'t exist.')
+
 
     def delete_all_domains_cannot_be_undone(self):
         '''
@@ -307,24 +364,6 @@ class KpAnalysisClient(AbstractClient):
         res = self._get(self.host + data_endpoint, {'domain': domain, 'get_sentences': True, 'job_id': job_id})
         logging.info(res['msg'])
         return res['sentences_results']
-
-    def create_domain_ignore_exists(self, domain, domain_params):
-        try:
-            self.create_domain(domain, domain_params)
-            logging.info(f'domain: {domain} was created')
-        except KpaIllegalInputException as e:
-            if 'already exist' not in str(e):
-                raise e
-            logging.info(f'domain: {domain} already exists, domain_params are NOT updated.')
-
-    def delete_domain_ignore_doesnt_exist(self, domain):
-        try:
-            self.delete_domain_cannot_be_undone(domain)
-            logging.info(f'domain: {domain} was deleted')
-        except KpaIllegalInputException as e:
-            if 'doesn\'t have domain' not in str(e):
-                raise e
-            logging.info(f'domain: {domain} doesn\'t exist.')
 
 
 class KpAnalysisTaskFuture:
