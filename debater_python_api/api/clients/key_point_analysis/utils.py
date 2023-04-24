@@ -62,3 +62,17 @@ def write_df_to_file(df, file):
         logging.info('creating directory: %s' % str(file_path.parent))
         os.makedirs(file_path.parent)
     df.to_csv(file, index=False)
+
+
+def update_row_with_stance_data(r):
+    stance_dict = dict(r["stance_dict"])
+    stance_list = list(stance_dict.items())
+    stance_list = sorted(stance_list, reverse=True, key=lambda item: item[1])
+    stance, conf = stance_list[0]
+    r["stance"] = stance
+    r["stance_conf"] = conf
+    return r
+
+
+def get_unique_sent_id(sentence_dict):
+    return f"{sentence_dict['comment_id']}_{sentence_dict['sentence_id']}"

@@ -53,28 +53,6 @@ class KpAnalysisUtils:
                 logging.info(f'    Job: {str(kp_analysis_status)}')
 
     @staticmethod
-    def write_sentences_to_csv(sentences, out_file):
-        def get_selected_stance(r):
-            stance_dict = dict(r["stance_dict"])
-            stance_list = list(stance_dict.items())
-            stance_list = sorted(stance_list, reverse=True, key=lambda item: item[1])
-            stance, conf = stance_list[0]
-            r["stance"] = stance
-            r["stance_conf"] = conf
-            return r
-
-        if len(sentences) == 0:
-            logging.info('there are no sentences, not saving file')
-            return
-
-        cols = list(sentences[0].keys())
-        rows = [[s[col] for col in cols] for s in sentences]
-        df = pd.DataFrame(rows, columns=cols)
-        if "stance_dict" in cols and sentences[0]["stance_dict"]:
-            df = df.apply(lambda r: get_selected_stance(r), axis=1)
-        df.to_csv(out_file, index=False)
-
-    @staticmethod
     def init_logger():
         '''
         Inits the logger for more informative console prints.
