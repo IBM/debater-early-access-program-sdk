@@ -12,37 +12,45 @@ from debater_python_api.api.clients.key_point_analysis.utils import read_dicts_f
 CURR_RESULTS_VERSION = "2.0"
 
 class KpaResult:
-    def __init__(self, result_json, result_df, version=CURR_RESULTS_VERSION):
+    def __init__(self, result_json, version=CURR_RESULTS_VERSION):
         self.result_json = result_json
-        self.result_df = result_df
+        self.result_df = self.create_result_df()
+        self.summary_df = self.result_df_to_summary_df()
         self.version = version
 
-    def to_json_file(self, json_file):
+    def save(self, json_file):
         with open(json_file, 'w') as f:
             json.dump(self.result_json, f)
 
     @staticmethod
-    def result_json_to_result_df(result):
-        if 'keypoint_matchings' not in result:
-            logging.info("No keypoint matchings results")
-            return None, None
+    def load(json_file):
+        with open(json_file, 'r') as f:
+            json_res = json.load(f)
+            return KpaResult.create_from_result_json(json_res)
 
+    def create_result_df(self):
+
+        sentences_data = self.result_json["sentences_data"]
         matchings_rows = []
         kps_have_stance = False
         sentences_have_stance = False
         stance_keys = []
-        for keypoint_matching in result['keypoint_matchings']:
+        for keypoint_matching in self.result_json['keypoint_matchings']:
             kp = keypoint_matching['keypoint']
+            kp_quality = keypoint_matching.get('kp_quality', None)
             kp_stance = keypoint_matching.get('stance', None)
             if kp_stance is not None:
                 kps_have_stance = True
 
             for match in keypoint_matching['matching']:
-                match_row = [kp, match["sentence_text"], match["score"], match["comment_id"], match["sentence_id"],
-                             match["sents_in_comment"], match["span_start"], match["span_end"], match["num_tokens"],
-                             match["argument_quality"], match.get("kp_quality", 0)]
+                score = match["score"]
+                sent_identifier = match["sent_identifier"]
+                sent_data = sentences_data[sent_identifier]
+                match_row = [kp, sent_data["sentence_text"], score, sent_data["comment_id"], sent_data["sentence_id"],
+                             sent_data["sents_in_comment"], sent_data["span_start"], sent_data["span_end"], sent_data["num_tokens"],
+                             sent_data["argument_quality"], kp_quality]
 
-                if 'stance' in match:
+                if 'stance' in sent_data:
                     stance_dict = match['stance']
                     stance_tups = list(stance_dict.items())
                     stance_keys = [t[0] for t in stance_tups]
@@ -116,7 +124,7 @@ class KpaResult:
         return pd.DataFrame(summary_rows, columns=summary_cols)
 
     @staticmethod
-    def result_df_to_result_json(result_df):
+    def result_df_to_result_json(result_df, new_version = True):
         kp_to_matches = defaultdict(list)
         dicts, _ = read_dicts_from_df(result_df)
         for i, match in enumerate(dicts):
@@ -154,32 +162,57 @@ class KpaResult:
             if stance is not None:
                 km['stance'] = stance
             result_json['keypoint_matchings'].append(km)
+        if new_version:
+            result_json = KpaResult.create_from_result_json(result_json)
         return result_json
 
     @staticmethod
-    def create_from_result_json(result_json, name=None):
-        if 'keypoint_matchings' not in result_json: #todo send error??
-            logging.info("No keypoint matchings results")
-            return KpaResult(result_json, None, None, None, name)
+    def create_from_result_json(result_json):
+        if 'keypoint_matchings' not in result_json:
+            logging.error("Faulty results json provided: does not contain 'keypoint_matchings'. returning empty results")
+            return None # TODO raise Exception??
         else:
-            result_df = KpaResult.result_json_to_result_df(result_json)
-            return KpaResult(result_json, result_df, name)
+            if "version" in result_json:
+                return KpaResult(result_json)
+            else:
+                result_json_v2 = KpaResult.convert_to_v2(result_json)
+                return KpaResult(result_json_v2)
 
     @staticmethod
-    def create_from_result_csv(result_csv, name=None):
+    def create_from_result_csv(result_csv):
         result_df = pd.read_csv(result_csv)
         result_json = KpaResult.result_df_to_result_json(result_df)
-        return KpaResult(result_json, result_df, name)
+        return KpaResult(result_json)
 
-    def write_to_csv_file(self, result_file):
-        if '.csv' not in result_file:
-            result_file += '.csv'
+    @staticmethod
+    def convert_to_v2(result_json):
+        sentences_data = {}
+        new_matchings = []
+        for keypoint_matching in result_json['keypoint_matchings']:
+            kp = keypoint_matching['keypoint']
+            kp_stance = keypoint_matching.get('stance', None)
+            new_kp_matching = {'keypoint': kp, "matching": []}
+            if kp_stance is not None:
+                new_kp_matching["stance"] = kp_stance
 
-        write_df_to_file(self.result_df, result_file)
+            for match in keypoint_matching['matching']:
+                if "kp_quality" not in new_kp_matching:
+                    kpq = match.get("kp_quality", 0)
+                    new_kp_matching["kp_quality"] = kpq
 
-        summary_df = self.result_df_to_summary_df()
-        summary_file = result_file.replace(".csv", "_kps_summary.csv")
-        write_df_to_file(summary_df, summary_file)
+                sent_identifier = get_unique_sent_id(match)
+                new_kp_matching["matching"].append({"sent_identifier":sent_identifier, "score":match["score"]})
+
+                if sent_identifier not in sentences_data:
+                    sentences_data[sent_identifier] = {c:match[c] for c in ["sentence_text","comment_id","sentence_id",
+                                            "sents_in_comment","span_start","span_end","num_tokens","argument_quality",
+                                            ]}
+                if "stance" in match:
+                    sentences_data[sent_identifier]["stance"] = dict(match["stance"])
+
+            new_matchings.append(new_kp_matching)
+        return {"keypoint_matchings":new_matchings, "sentences_data":sentences_data, "version":CURR_RESULTS_VERSION}
+
 
     def print_result(self, n_sentences_per_kp, title):
         '''
