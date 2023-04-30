@@ -8,14 +8,14 @@ import pandas as pd
 import numpy as np
 
 from debater_python_api.api.clients.key_point_analysis.utils import read_dicts_from_df, create_dict_to_list, \
-    write_df_to_file
-
+    write_df_to_file, get_unique_sent_id
+CURR_RESULTS_VERSION = "2.0"
 
 class KpaResult:
-    def __init__(self, result_json, result_df, name=None):
+    def __init__(self, result_json, result_df, version=CURR_RESULTS_VERSION):
         self.result_json = result_json
         self.result_df = result_df
-        self.name = name if name else "kpa_results"
+        self.version = version
 
     def to_json_file(self, json_file):
         with open(json_file, 'w') as f:
@@ -256,15 +256,11 @@ class KpaResult:
                 kid_stance = None if 'stance' not in kid else kid['stance']
                 print_kp(kid_kp, kid_stance, len(kid['matching']), None, 1, kid, n_sentences_per_kp)
 
-    @staticmethod
-    def get_unique_sent_id(sentence_dict):
-        return f"{sentence_dict['comment_id']}_{sentence_dict['sentence_id']}"
-
     def get_number_of_unique_sentences(self, include_unmatched=True):
         total_sentences = set()
         for i, keypoint_matching in enumerate(self.result_json['keypoint_matchings']):
             matches = keypoint_matching['matching']
-            matching_sents_ids = set([KpaResult.get_unique_sent_id(d) for d in matches])
+            matching_sents_ids = set([get_unique_sent_id(d) for d in matches])
             if keypoint_matching['keypoint'] != 'none' or include_unmatched:
                 total_sentences = total_sentences.union(matching_sents_ids)
         return len(total_sentences)
@@ -274,20 +270,18 @@ class KpaResult:
                        if kp['keypoint'] != 'none' or include_none}
         return kps_n_args
 
-    def compare_with_other(self, other_results):
-        title_1 = self.name
+    def compare_with_other(self, other_results, this_title, other_title):
         result_1_total_sentences = self.get_number_of_unique_sentences(include_unmatched=True)
         kps1_n_args = self.get_kp_to_n_matched_sentences(include_none=False)
         kps1 = set(kps1_n_args.keys())
 
-        title_2 = other_results.name
         result_2_total_sentences = other_results.get_number_of_unique_sentences(include_unmatched=True)
         kps2_n_args = other_results.get_kp_to_n_matched_sentences(include_none=False)
         kps2 = set(kps2_n_args.keys())
 
         kps_in_both = kps1.intersection(kps2)
         kps_in_both = sorted(list(kps_in_both), key=lambda kp: kps1_n_args[kp], reverse=True)
-        cols = ['key point', f'{title_1}_n_sents', f'{title_1}_percent', f'{title_2}_n_sents', f'{title_2}_percent',
+        cols = ['key point', f'{this_title}_n_sents', f'{this_title}_percent', f'{other_title}_n_sents', f'{other_title}_percent',
                 'change_n_sents', 'change_percent']
         rows = []
         for kp in kps_in_both:
