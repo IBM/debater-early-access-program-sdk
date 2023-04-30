@@ -23,13 +23,14 @@ class KpAnalysisClient(AbstractClient):
     '''
     A client for the Key Point Analysis (KPA) service.
     '''
-    def __init__(self, apikey: str, host: Optional[str]=None):
+    def __init__(self, apikey: str, host: Optional[str] = None, verify_certificate: bool = True):
         '''
         :param apikey: user's api-key, should be retreived from the early-access-program site.
         :param host: optional, enable switching to alternative services.
         '''
         AbstractClient.__init__(self, apikey)
         self.host = host if host is not None else 'https://keypoint-matching-backend.debater.res.ibm.com'
+        self.verify_certificate = verify_certificate
 
     def _delete(self, url, params, use_cache=True, timeout=300, retries=10, headers=None):
         return self._run_request_with_retry(requests.delete, url, params, use_cache, timeout, retries, headers)
@@ -52,9 +53,9 @@ class KpAnalysisClient(AbstractClient):
         while True:
             try:
                 if func.__name__ == 'post':
-                    resp = func(url, json=params, headers=headers, timeout=timeout)
+                    resp = func(url, json=params, headers=headers, timeout=timeout, verify=self.verify_certificate)
                 else:
-                    resp = func(url, params=params, headers=headers, timeout=timeout)
+                    resp = func(url, params=params, headers=headers, timeout=timeout, verify=self.verify_certificate)
                 if resp.status_code == 200:
                     return resp.json()
                 if resp.status_code == 422:
@@ -117,6 +118,7 @@ class KpAnalysisClient(AbstractClient):
         assert self._is_list_of_strings(comments_texts), 'comment_texts must be a list of strings'
         assert self._is_list_of_strings(comments_ids), 'comment_ids must be a list of strings'
         assert len([c for c in comments_texts if c is None or c == '' or len(c) == 0 or c.isspace()]) == 0, 'comment_texts must not have an empty string in it'
+        assert len([c for c in comments_texts if len(c) > 3000]) == 0, 'comment_texts must be shorter than 3000 charachters'
         logging.info('uploading %d comments in batches' % len(comments_ids))
 
         ids_texts = list(zip(comments_ids, comments_texts))
@@ -157,8 +159,8 @@ class KpAnalysisClient(AbstractClient):
                 break
             time.sleep(polling_timout_secs if polling_timout_secs is not None else 10)
 
-    def start_kp_analysis_job(self, domain: str, comments_ids: Optional[List[str]]=None,
-                              run_params=None, description: Optional[str]=None, use_cache: bool = True) -> 'KpAnalysisTaskFuture':
+    def start_kp_analysis_job(self, domain: str, comments_ids: Optional[List[str]] = None,
+                              run_params = None, description: Optional[str] = None, use_cache: bool = True) -> 'KpAnalysisTaskFuture':
         '''
         Starts a Key Point Analysis (KPA) job in an async manner. Please make sure all comments had already been uploaded into a domain and processed before starting a new job (using the wait_till_all_comments_are_processed method).
           * By default it runs over all comments in the domain. In order to run only on a subset of the comments in the domain, pass their ids in the comment_ids param.
@@ -324,7 +326,7 @@ class KpAnalysisClient(AbstractClient):
 
     def get_sentences_for_domain(self, domain: str, job_id: Optional[str] = None):
         '''
-        Uploaded comments are cleaned and splitted into sentences. This method retrieves the sentences in a domain.
+        Uploaded comments are cleaned and split into sentences. This method retrieves the sentences in a domain.
         :param domain: the name of the domain.
         :param job_id: when provided, it will only return the sentences used in a specific key point analysis job.
         :return: a dictionary with all the sentences' details.
