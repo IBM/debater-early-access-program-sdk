@@ -1,0 +1,1 @@
+4.3.2: adding the ability to disable certificate check via KpAnalysisClient->verify_certificate parameter
