@@ -2,12 +2,11 @@ import json
 import logging
 import pandas as pd
 import numpy as np
-from debater_python_api.api.clients.key_point_analysis.KpaResult import KpaResult
 from debater_python_api.api.clients.key_point_analysis.docx_generator import save_hierarchical_graph_data_to_docx
 from debater_python_api.api.clients.key_point_analysis.utils import create_dict_to_list, read_dicts_from_df
 
 
-def create_graph_data(kpa_result: KpaResult, min_n_similar_matches=5, n_matches_samples=20):
+def create_graph_data(full_results_df, min_n_similar_matches=5, n_matches_samples=20):
     '''
     translates the result file (full result, not the summary) into a json that is loadable in the kpa-key-points-graph-ui
     :param kpa_result: a KpaResult instance
@@ -54,7 +53,7 @@ def create_graph_data(kpa_result: KpaResult, min_n_similar_matches=5, n_matches_
                             for d in kp_to_dicts[kp][:n_matches_samples]]
                 }
 
-    dicts, _ = read_dicts_from_df(kpa_result.result_df)
+    dicts, _ = read_dicts_from_df(full_results_df)
     n_sentences = len(set([d['sentence_text'] for d in dicts]))
     kp_to_dicts = create_dict_to_list([(d['kp'], d) for d in dicts])
     all_kps = set(kp_to_dicts.keys())
@@ -131,120 +130,68 @@ def graph_data_to_hierarchical_graph_data(graph_data_json_file=None,
              e['data']['source'] in id_to_max_parent and id_to_max_parent[e['data']['source']] == e['data']['target']]
     return nodes + edges
 
-
-def save_graph_data(graph_data, out_file):
-    logging.info(f'saving graph in file: {out_file}')
-    with open(out_file, 'w') as f:
-        json.dump(graph_data, f)
-
-
-def hierarchical_graph_data_to_textual_bullets(graph_data_json_file=None, graph_data=None, out_file=None):
-    def get_hierarchical_bullets_aux(id_to_kids, id_to_node, id, tab, res):
-        msg = f'{"  " * tab} * {id_to_node[id]["data"]["kp"]} ({id_to_node[id]["data"]["n_matches"]} matches)'
-        res.append(msg)
-        if id in id_to_kids:
-            kids = id_to_kids[id]
-            kids = sorted(kids, key=lambda n: int(id_to_node[n]['data']['n_matches']), reverse=True)
-            for k in kids:
-                get_hierarchical_bullets_aux(id_to_kids, id_to_node, k, tab + 1, res)
-
-    def get_hierarchical_bullets(roots, id_to_kids, id_to_node):
-        res = []
-        tab = 0
-        roots = sorted(roots, key=lambda n: int(id_to_node[n]['data']['n_matches']), reverse=True)
-        for root in roots:
-            get_hierarchical_bullets_aux(id_to_kids, id_to_node, root, tab, res)
-        return res
-
-    if (graph_data_json_file is None and graph_data is None) or (
-            graph_data_json_file is not None and graph_data is not None):
-        logging.error('Please pass either graph_data_json_file or graph_data')
-
-    if graph_data_json_file is not None:
-        print(f'creating hierarchical graph from file: {graph_data_json_file}')
-        graph_data = json.load(open(graph_data_json_file))
-
-    nodes = [d for d in graph_data if d['type'] == 'node']
-    edges = [d for d in graph_data if d['type'] == 'edge']
-
-    nodes_ids = [n['data']['id'] for n in nodes]
-    id_to_node = {d['data']['id']: d for d in nodes}
-
-    id_to_kids = create_dict_to_list([(e['data']['target'], e['data']['source']) for e in edges])
-    all_kids = set()
-    for id, kids in id_to_kids.items():
-        all_kids = all_kids.union(kids)
-
-    root_ids = set(nodes_ids).difference(all_kids)
-    bullets_txt = get_hierarchical_bullets(root_ids, id_to_kids, id_to_node)
-    if out_file is not None:
-        logging.info(f'saving textual bullets in file: {out_file}')
-        with open(out_file, 'w') as f:
-            for line in bullets_txt:
-                f.write("%s\n" % line)
-    return bullets_txt
+# def hierarchical_graph_data_to_textual_bullets(graph_data_json_file=None, graph_data=None, out_file=None):
+#     def get_hierarchical_bullets_aux(id_to_kids, id_to_node, id, tab, res):
+#         msg = f'{"  " * tab} * {id_to_node[id]["data"]["kp"]} ({id_to_node[id]["data"]["n_matches"]} matches)'
+#         res.append(msg)
+#         if id in id_to_kids:
+#             kids = id_to_kids[id]
+#             kids = sorted(kids, key=lambda n: int(id_to_node[n]['data']['n_matches']), reverse=True)
+#             for k in kids:
+#                 get_hierarchical_bullets_aux(id_to_kids, id_to_node, k, tab + 1, res)
+#
+#     def get_hierarchical_bullets(roots, id_to_kids, id_to_node):
+#         res = []
+#         tab = 0
+#         roots = sorted(roots, key=lambda n: int(id_to_node[n]['data']['n_matches']), reverse=True)
+#         for root in roots:
+#             get_hierarchical_bullets_aux(id_to_kids, id_to_node, root, tab, res)
+#         return res
+#
+#     if (graph_data_json_file is None and graph_data is None) or (
+#             graph_data_json_file is not None and graph_data is not None):
+#         logging.error('Please pass either graph_data_json_file or graph_data')
+#
+#     if graph_data_json_file is not None:
+#         print(f'creating hierarchical graph from file: {graph_data_json_file}')
+#         graph_data = json.load(open(graph_data_json_file))
+#
+#     nodes = [d for d in graph_data if d['type'] == 'node']
+#     edges = [d for d in graph_data if d['type'] == 'edge']
+#
+#     nodes_ids = [n['data']['id'] for n in nodes]
+#     id_to_node = {d['data']['id']: d for d in nodes}
+#
+#     id_to_kids = create_dict_to_list([(e['data']['target'], e['data']['source']) for e in edges])
+#     all_kids = set()
+#     for id, kids in id_to_kids.items():
+#         all_kids = all_kids.union(kids)
+#
+#     root_ids = set(nodes_ids).difference(all_kids)
+#     bullets_txt = get_hierarchical_bullets(root_ids, id_to_kids, id_to_node)
+#     if out_file is not None:
+#         logging.info(f'saving textual bullets in file: {out_file}')
+#         with open(out_file, 'w') as f:
+#             for line in bullets_txt:
+#                 f.write("%s\n" % line)
+#     return bullets_txt
 
 
-def generate_graphs_and_textual_summary(kpa_result: KpaResult, result_filename,
-                                                   min_n_similar_matches_in_graph=5,
-                                                   n_top_matches_in_graph=20,
-                                                   filter_min_relations_for_text=0.4,
-                                                   n_matches_in_docx=50,
-                                                   include_match_score_in_docx=False,
-                                                   min_n_matches_in_docx=5,
-                                                   save_only_docx=False):
-    '''
-    kpa_result: the KpaResult object holding the results
-    result_filename: the ..._result.csv that is saved using write_result_to_csv method.
-    min_n_similar_matches_in_graph: the minimal number of matches that match both key points when calculating the relation between them.
-    n_top_matches_in_graph: number of top matches to add to the graph_data file.
-    filter_min_relations_for_text: the minimal key points relation threshold, when creating the textual summaries.
-    n_matches_in_docx: number of top matches to write in the textual summary (docx file). Pass None for all matches.
-    include_match_score_in_docx: when set to true, the match score between the sentence and the key point is added.
-    min_n_matches_in_docx: remove key points with less than min_n_matches_in_docx matching sentences.
-
-    This method creates 4 files:
-        * <result_file>_graph_data.json: a graph_data file that can be loaded to the key points graph-demo-site:
-        https://keypoint-matching-ui.ris2-debater-event.us-east.containers.appdomain.cloud/
-        It presents the relations between the key points as a graph of key points.
-        * <result_file>_hierarchical_graph_data.json: another graph_data file that can be loaded to the graph-demo-site.
-        This graph is simplified, it's more convenient to extract insights from it.
-        * <result_file>_hierarchical.txt: This textual file shows the simplified graph (from the previous bullet) as a list of hierarchical bullets.
-        * <result_file>_hierarchical.docx: This Microsoft Word document shows the textual bullets (from the previous bullet) as a user-friendly report.
-    '''
-    graph_data_full = create_graph_data(kpa_result,
-                                                        min_n_similar_matches=min_n_similar_matches_in_graph,
-                                                        n_matches_samples=n_top_matches_in_graph)
-    if not save_only_docx:
-        save_graph_data(graph_data_full, result_filename.replace('.csv', '_graph_data.json'))
-
-    graph_data_hierarchical = graph_data_to_hierarchical_graph_data(graph_data=graph_data_full)
-    if not save_only_docx:
-        save_graph_data(graph_data_hierarchical,
-                                        result_filename.replace('.csv', '_hierarchical_graph_data.json'))
-
-    if filter_min_relations_for_text > 0:
-        nodes = [d for d in graph_data_hierarchical if d['type'] == 'node']
-        edges = [d for d in graph_data_hierarchical if d['type'] == 'edge']
-        edges = [e for e in edges if float(e['data']['score']) >= filter_min_relations_for_text]
-        graph_data_hierarchical = nodes + edges
-
-    if not save_only_docx:
-        hierarchical_graph_data_to_textual_bullets(graph_data=graph_data_hierarchical,
-                                                                   out_file=result_filename.replace('.csv',
-                                                                                                    '_hierarchical_bullets.txt'))
-    save_hierarchical_graph_data_to_docx(kpa_result=kpa_result, graph_data=graph_data_hierarchical,
-                                         result_filename=result_filename, n_matches=n_matches_in_docx,
-                                         include_match_score=include_match_score_in_docx,
-                                         min_n_matches=min_n_matches_in_docx)
+def filter_graph_by_relation_strength(graph_data, min_relation_strength):
+    if min_relation_strength > 0:
+        nodes = [d for d in graph_data if d['type'] == 'node']
+        edges = [d for d in graph_data if d['type'] == 'edge']
+        edges = [e for e in edges if float(e['data']['score']) >= min_relation_strength]
+        graph_data = nodes + edges
+    return graph_data
 
 
-def get_hierarchical_graph_from_tree_and_subset_results(graph_data_hierarchical, kpa_result,
+def get_hierarchical_graph_from_tree_and_subset_results(graph_data_hierarchical, subset_results_df,
                                                         filter_min_relations_for_text=0.4,
                                                         n_top_matches_in_graph=20):
-    results_df = kpa_result.result_df
-    n_sentences = len(set(results_df["sentence_text"]))
-    results_kps = [kp for kp in set(results_df["kp"]) if kp != "none"]
+
+    n_sentences = len(set(subset_results_df["sentence_text"]))
+    results_kps = [kp for kp in set(subset_results_df["kp"]) if kp != "none"]
 
     nodes = [d for d in graph_data_hierarchical if d['type'] == 'node']
     edges = [d for d in graph_data_hierarchical if d['type'] == 'edge']
@@ -258,13 +205,13 @@ def get_hierarchical_graph_from_tree_and_subset_results(graph_data_hierarchical,
             f"New result file contains {n_kps_in_new_only} key points not in the graph data. Not creating summaries.")
         return None
 
-    results_df = results_df[results_df["kp"] != "none"]
-    kp_to_results = {k: v for k, v in results_df.groupby(["kp"])}
+    subset_results_df = subset_results_df[subset_results_df["kp"] != "none"]
+    kp_to_results = {k: v for k, v in subset_results_df.groupby(["kp"])}
 
     new_nodes = []
     for node in nodes:
         node_kp = node["data"]["kp"]
-        kp_results = kp_to_results.get(node_kp, pd.DataFrame([], columns=results_df.columns))
+        kp_results = kp_to_results.get(node_kp, pd.DataFrame([], columns=subset_results_df.columns))
         n_matches = len(kp_results)
         sentences_text = list(kp_results["sentence_text"])
         scores = list(kp_results["match_score"])
@@ -309,44 +256,3 @@ def get_hierarchical_graph_from_tree_and_subset_results(graph_data_hierarchical,
         e["data"]["score"] = -1
 
     return new_nodes + edges
-
-
-def generate_graphs_and_textual_summary_for_given_tree(hierarchical_data_file, kpa_result: KpaResult,
-                                                                  results_file, file_suff="_from_full",
-                                                                  n_top_matches_in_graph=20,
-                                                                  filter_min_relations_for_text=0.4,
-                                                                  n_matches_in_docx=50,
-                                                                  include_match_score_in_docx=False,
-                                                                  min_n_matches_in_docx=5,
-                                                                  save_only_docx=False):
-    '''
-    Create hierarchical results for kpa_result, using a precalculated hierarchical results hierarchical_data_file.
-    This is useful when we first create hierarchical_data_file using the whole data, and then want to calculate the
-    hierarchical result of its subset while considering the already existing hierarchy generated over the whole data.
-    For example, when we have a large survey, we can first run over the entire data using the method
-    generate_graphs_and_textual_summary method to create a hierarchical representation of the results. Then when we
-    want to evaluate a subset of the survey we can run over a subset of the survey and when we create its
-    hierarchical representation we will use the hierarchical_data_file of the full survey.
-    '''
-    with open(hierarchical_data_file, "r") as f:
-        graph_data_hierarchical = json.load(f)
-
-    new_hierarchical_graph_data = get_hierarchical_graph_from_tree_and_subset_results(
-        graph_data_hierarchical,
-        kpa_result, filter_min_relations_for_text, n_top_matches_in_graph)
-
-    if not new_hierarchical_graph_data:
-        return
-
-    if not save_only_docx:
-        new_hierarchical_graph_file = results_file.replace(".csv", f"{file_suff}_hierarchical_graph_data.json")
-        save_graph_data(new_hierarchical_graph_data, new_hierarchical_graph_file)
-        bullets_file = new_hierarchical_graph_file.replace('_graph_data.json', '_bullets.txt')
-        hierarchical_graph_data_to_textual_bullets(graph_data=new_hierarchical_graph_data,
-                                                                   out_file=bullets_file)
-
-    save_hierarchical_graph_data_to_docx(kpa_result=kpa_result, graph_data=new_hierarchical_graph_data,
-                                         result_filename=results_file,
-                                         n_matches=n_matches_in_docx,
-                                         include_match_score=include_match_score_in_docx,
-                                         min_n_matches=min_n_matches_in_docx, file_suff=file_suff)

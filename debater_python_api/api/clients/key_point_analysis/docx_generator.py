@@ -5,10 +5,8 @@ import docx
 from docx.enum.dml import MSO_THEME_COLOR_INDEX
 from docx.shared import Inches, Pt, RGBColor
 from docx import Document
-
-from debater_python_api.api.clients.key_point_analysis.KpaResult import KpaResult
 from debater_python_api.api.clients.key_point_analysis.utils import create_dict_to_list, \
-    trunc_float, read_dicts_from_df
+    trunc_float, read_dicts_from_df, get_unique_sent_id
 
 from docx.oxml.shared import OxmlElement
 from docx.oxml.ns import qn
@@ -83,7 +81,7 @@ def set_heading(heading):
 def get_unique_matches_subtree(node_id, id_to_node, id_to_kids, id_to_n_unique_matches_subtree, kp_to_dicts, by_sentence = True):
     kp = id_to_node[node_id]['data']['kp']
     if by_sentence:
-        kp_unique_sentences = set([KpaResult.get_unique_sent_id(d) for d in kp_to_dicts[kp]])
+        kp_unique_sentences = set([get_unique_sent_id(d) for d in kp_to_dicts[kp]])
     else: # by comments
         kp_unique_sentences = set([d['comment_id'] for d in kp_to_dicts[kp]])
     if node_id in id_to_kids:
@@ -94,8 +92,8 @@ def get_unique_matches_subtree(node_id, id_to_node, id_to_kids, id_to_n_unique_m
 
 def add_data_stats(dicts, nodes_ids, document, stance, min_n_matches):
     dicts_not_none = list(filter(lambda r: r["kp"] != "none", dicts))
-    n_sents = len(set([KpaResult.get_unique_sent_id(d) for d in dicts]))
-    rate_matched_sents = 100 *len(set([KpaResult.get_unique_sent_id(d) for d in dicts_not_none])) / n_sents
+    n_sents = len(set([get_unique_sent_id(d) for d in dicts]))
+    rate_matched_sents = 100 *len(set([get_unique_sent_id(d) for d in dicts_not_none])) / n_sents
     n_comments = len(set([d["comment_id"] for d in dicts]))
     rate_matched_comments = 100 *len(set([d["comment_id"] for d in dicts_not_none])) / n_comments
     n_kps = len(nodes_ids)
@@ -123,7 +121,7 @@ def sample_list_keep_order(list_to_sample, n_to_sample):
     return [list_to_sample[i] for i in sorted(random.sample(range(len(list_to_sample)), n_to_sample))]
 
 
-def save_hierarchical_graph_data_to_docx(kpa_result: KpaResult, graph_data, result_filename, n_matches=None, sort_by_subtree=True, include_match_score=False, min_n_matches=5, file_suff=""):
+def save_hierarchical_graph_data_to_docx(full_result_df, graph_data, result_filename, n_matches=None, sort_by_subtree=True, include_match_score=False, min_n_matches=5):
     def get_hierarchical_bullets_aux(document, id_to_kids, id_to_node, id, tab, id_to_paragraph, id_to_n_matches_subtree, sort_by_subtree=True, ids_order=[]):
         bullet = '\u25E6' if tab % 2 == 1 else '\u2022'
         msg = f'{("   " * tab)} {bullet} '
@@ -175,7 +173,7 @@ def save_hierarchical_graph_data_to_docx(kpa_result: KpaResult, graph_data, resu
     style = document.styles['Normal']
     style.font.name = 'Calibri'
 
-    dicts, _ = read_dicts_from_df(kpa_result.result_df)
+    dicts, _ = read_dicts_from_df(full_result_df)
     kp_to_dicts = create_dict_to_list([(d['kp'], d) for d in dicts])
 
     id_to_n_matches_subtree = {}
@@ -297,6 +295,5 @@ def save_hierarchical_graph_data_to_docx(kpa_result: KpaResult, graph_data, resu
         msg = ' - back'
         add_link(paragraph=paragraph, link_to=f'hierarchy_bookmark{id}', text=msg, tool_tip="Click to view hierarchy", set_color=True)
 
-    out_file = result_filename.replace('.csv', f'{file_suff}_hierarchical.docx')
-    logging.info(f'saving docx summary in file: {out_file}')
-    document.save(out_file)
+    logging.info(f'saving docx summary in file: {result_filename}')
+    document.save(result_filename)
