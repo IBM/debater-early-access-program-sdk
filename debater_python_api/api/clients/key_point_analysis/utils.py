@@ -76,3 +76,10 @@ def update_row_with_stance_data(r):
 
 def get_unique_sent_id(sentence_dict):
     return f"{sentence_dict['comment_id']}_{sentence_dict['sentence_id']}"
+
+
+def get_cid_and_sid_from_sent_identifier(sent_identifier):
+    splits = sent_identifier.split("_")
+    sent_id = splits[-1]
+    cid = "_".join(splits)
+    return cid, sent_id
