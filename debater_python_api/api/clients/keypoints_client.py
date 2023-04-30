@@ -25,8 +25,9 @@ class KpAnalysisClient(AbstractClient):
     '''
     def __init__(self, apikey: str, host: Optional[str] = None, verify_certificate: bool = True):
         '''
-        :param apikey: user's api-key, should be retreived from the early-access-program site.
-        :param host: optional, enable switching to alternative services.
+        :param apikey: User's api-key, should be retreived from the early-access-program site.
+        :param host: Optional, enable switching to alternative services.
+        :param verify_certificate: Optional, will not verify the server's certificate when set to False. Useful when using a self-signed certificate.
         '''
         AbstractClient.__init__(self, apikey)
         self.host = host if host is not None else 'https://keypoint-matching-backend.debater.res.ibm.com'
