@@ -6,34 +6,54 @@ from collections import defaultdict
 
 import pandas as pd
 import numpy as np
+from keypoint_analysis.km_utils import init_logger
 
+from KpaExceptions import KpaIllegalInputException
 from debater_python_api.api.clients.key_point_analysis.utils import read_dicts_from_df, create_dict_to_list, \
-    write_df_to_file, get_unique_sent_id
+    write_df_to_file, get_unique_sent_id, get_cid_and_sid_from_sent_identifier
 from docx_generator import save_hierarchical_graph_data_to_docx
 from graph_generator import create_graph_data, graph_data_to_hierarchical_graph_data, filter_graph_by_relation_strength, \
     get_hierarchical_graph_from_tree_and_subset_results
 import os
 CURR_RESULTS_VERSION = "2.0"
 
+
 class KpaResult:
-    def __init__(self, result_json, version=CURR_RESULTS_VERSION):
+    """
+    Class to hold and process the results of a KPA job.
+    """
+    def __init__(self, result_json):
+        """
+        :param result_json: the result json returned from the key point client using get_results.
+        """
         self.result_json = result_json
         self.result_df = self.create_result_df()
         self.summary_df = self.result_df_to_summary_df()
-        self.version = version
+        self.version = CURR_RESULTS_VERSION
 
     def save(self, json_file):
+        """
+        Save to current results as a json file
+        :param json_file: path to the json file to hold the results
+        """
+        logging.info(f"Writing results to: {json_file}")
         with open(json_file, 'w') as f:
             json.dump(self.result_json, f)
 
     @staticmethod
     def load(json_file):
+        """
+        Load results from a json file
+        :param json_file: the file to load the results from, obtained using the save() method.
+        :return: KpaResult that wraps the results.
+        """
+        logging.info(f"Loading results from: {json_file}")
         with open(json_file, 'r') as f:
             json_res = json.load(f)
             return KpaResult.create_from_result_json(json_res)
 
-    def create_result_df(self):
 
+    def create_result_df(self):
         sentences_data = self.result_json["sentences_data"]
         matchings_rows = []
         kps_have_stance = False
@@ -49,9 +69,12 @@ class KpaResult:
             for match in keypoint_matching['matching']:
                 score = match["score"]
                 sent_identifier = match["sent_identifier"]
-                sent_data = sentences_data[sent_identifier]
-                match_row = [kp, sent_data["sentence_text"], score, sent_data["comment_id"], sent_data["sentence_id"],
-                             sent_data["sents_in_comment"], sent_data["span_start"], sent_data["span_end"], sent_data["num_tokens"],
+                comment_id, sent_id_in_comment = get_cid_and_sid_from_sent_identifier(sent_identifier)
+                comment_data = sentences_data[comment_id]
+                sent_data = comment_data["sentences"][sent_id_in_comment]
+
+                match_row = [kp, sent_data["sentence_text"], score, comment_id, sent_id_in_comment,
+                             comment_data["sents_in_comment"], sent_data["span_start"], sent_data["span_end"], sent_data["num_tokens"],
                              sent_data["argument_quality"], kp_quality]
 
                 if 'stance' in sent_data:
@@ -172,23 +195,36 @@ class KpaResult:
 
     @staticmethod
     def create_from_result_json(result_json):
+        """
+        Create KpaResults from results_json
+        :param result_json: the json object obtained from the client via "get_results"
+        """
         if 'keypoint_matchings' not in result_json:
-            logging.error("Faulty results json provided: does not contain 'keypoint_matchings'. returning empty results")
-            return None # TODO raise Exception??
+            raise KpaIllegalInputException("Faulty results json provided: does not contain 'keypoint_matchings'. returning empty results")
         else:
-            if "version" in result_json:
-                return KpaResult(result_json)
-            else:
-                result_json_v2 = KpaResult.convert_to_v2(result_json)
-                return KpaResult(result_json_v2)
+            try:
+                if "version" in result_json:
+                    return KpaResult(result_json)
+                else:
+                    result_json_v2 = KpaResult.convert_to_v2(result_json)
+                    return KpaResult(result_json_v2)
+            except Exception as e:
+                logging.error("Could not create KpaResults from json.")
+                raise e
 
     @staticmethod
     def create_from_result_csv(result_csv):
+        """
+        Create KpaResults from results csv. Remains for backwards compatibility and will be removed in next versions.
+        :param result_csv : csv holding the full results.
+        : return KpaResult object
+        """
         result_df = pd.read_csv(result_csv)
         result_json = KpaResult.result_df_to_result_json(result_df)
         return KpaResult(result_json)
 
     @staticmethod
+    # If json results are of ald version, convert to version 2.0
     def convert_to_v2(result_json):
         sentences_data = {}
         new_matchings = []
@@ -205,18 +241,22 @@ class KpaResult:
                     new_kp_matching["kp_quality"] = kpq
 
                 sent_identifier = get_unique_sent_id(match)
+                comment_id = match["comment_id"]
+                sent_id_in_comment = match["sentence_id"]
+
                 new_kp_matching["matching"].append({"sent_identifier":sent_identifier, "score":match["score"]})
 
-                if sent_identifier not in sentences_data:
-                    sentences_data[sent_identifier] = {c:match[c] for c in ["sentence_text","comment_id","sentence_id",
-                                            "sents_in_comment","span_start","span_end","num_tokens","argument_quality",
-                                            ]}
-                if "stance" in match:
-                    sentences_data[sent_identifier]["stance"] = dict(match["stance"])
+                if comment_id not in sentences_data:
+                    sentences_data[comment_id] = {"sents_in_comment":match["sents_in_comment"], "sentences":{}}
+
+                if sent_id_in_comment not in sentences_data[comment_id]["sentences"]:
+                    sent_data = {c:match[c] for c in ["sentence_text", "span_start","span_end","num_tokens","argument_quality"]}
+                    if "stance" in match:
+                        sent_data["stance"] = dict(match["stance"])
+                    sentences_data[comment_id]["sentences"][sent_id_in_comment] = sent_data.copy()
 
             new_matchings.append(new_kp_matching)
         return {"keypoint_matchings":new_matchings, "sentences_data":sentences_data, "version":CURR_RESULTS_VERSION}
-
 
     def export_to_dfs(self, output_dir=None, result_name=None):
         """
@@ -226,6 +266,7 @@ class KpaResult:
             * <ouput_dir>/<result_name>_kps_summary.csv : summary results.
         :param output_dir: optional, path to output directory
         :param result_name: optional, name of the results to appear in the output files.
+        :return: the full results and the summary results as dataframes
         """
         if output_dir and result_name:
             result_file = os.path.join(output_dir, result_name+".csv")
@@ -237,6 +278,11 @@ class KpaResult:
 
     @staticmethod
     def save_graph_data(graph_data, out_file):
+        """
+        saves graph data to json file
+        :param graph_data: the json object storing the graph data
+        :param out_file: json output file to save data
+        """
         logging.info(f'saving graph in file: {out_file}')
         with open(out_file, 'w') as f:
             json.dump(graph_data, f)
@@ -251,7 +297,7 @@ class KpaResult:
         :param result_name: optional, name of the results to appear in the output files.
         :param min_n_similar_matches_in_graph: optional, the minimal number of matches that match both key points when calculating the relation between them.
         :param n_top_matches_in_graph : optional, number of top matches to add to the graph_data file.
-        :return json objects graph_data and hierarchical_graph_data.
+        :return: json objects graph_data and hierarchical_graph_data.
         If output_dir and result_name are not None, this method creates 2 files:
             * <ouput_dir>/<result_name>_graph_data.json: a graph_data file that can be loaded to the key points graph-demo-site:
             https://keypoint-matching-ui.ris2-debater-event.us-east.containers.appdomain.cloud/
@@ -361,7 +407,7 @@ class KpaResult:
         if not new_hierarchical_graph_data:
             return
         new_hierarchical_graph_file = os.path.join(output_dir, result_name + "_hierarchical_graph_data.json")
-        self.save_graph_data(new_hierarchical_graph_data, new_hierarchical_graph_file)
+        KpaResult.save_graph_data(new_hierarchical_graph_data, new_hierarchical_graph_file)
         docx_file = os.path.join(output_dir, f'{result_name}{file_suff}_hierarchical.docx')
         save_hierarchical_graph_data_to_docx(self.result_df, graph_data=new_hierarchical_graph_data,
                                              result_filename=docx_file,
@@ -503,3 +549,16 @@ class KpaResult:
         for keypoint_matching in self.result_json['keypoint_matchings']:
             keypoint_matching['stance'] = stance
         self.result_df["stance"] = stance
+
+
+if __name__ == "__main__":
+    init_logger()
+    #result_csv = "/Users/lilache/Library/CloudStorage/Box-Box/interview_analysis/austin_results/new_match_models/per_year_results/2018/standalone/Q25/austin_2018_Q25_new_models_neg.csv"
+    result_csv = "/Users/lilache/Library/CloudStorage/Box-Box/interview_analysis/debater_p_results/2022/final/v0_multi_kps_sbert_stage2_15/eng_kp_input_2022_simplified_multi_kps_merged_kpa_results.csv"
+    kpa_json_results_old = KpaResult.result_df_to_result_json(pd.read_csv(result_csv), new_version=False)
+    with open("old_json_eng.json", 'w') as f:
+        json.dump(kpa_json_results_old, f)
+
+    new_json = KpaResult.convert_to_v2(kpa_json_results_old)
+    with open("new_json2_eng.json", 'w') as f:
+        json.dump(new_json, f)
