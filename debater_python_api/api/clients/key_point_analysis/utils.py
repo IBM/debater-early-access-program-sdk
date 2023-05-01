@@ -80,6 +80,6 @@ def get_unique_sent_id(sentence_dict):
 
 def get_cid_and_sid_from_sent_identifier(sent_identifier):
     splits = sent_identifier.split("_")
-    sent_id = splits[-1]
-    cid = "_".join(splits)
+    sent_id = int(splits[-1])
+    cid = "_".join(splits[:-1])
     return cid, sent_id
