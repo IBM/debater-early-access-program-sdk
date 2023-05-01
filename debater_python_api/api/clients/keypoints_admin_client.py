@@ -8,8 +8,8 @@ admin_reports_endpoint = '/admin_report'
 admin_actions_endpoint = '/admin_action'
 
 class KpAnalysisAdminClient(KpAnalysisClient):
-    def __init__(self, admin_password, apikey: str, host: Optional[str]=None):
-        super().__init__(apikey, host)
+    def __init__(self, admin_password, apikey: str, host: Optional[str]=None, verify_certificate: bool = True):
+        super().__init__(apikey, host, verify_certificate)
         self.admin_password = admin_password
 
     def get_admin_password_header(self, admin_password):
@@ -57,6 +57,20 @@ class KpAnalysisAdminClient(KpAnalysisClient):
                         {'report': 'comment_batches_statuses'},
                         headers=self.get_admin_password_header(self.admin_password))
         logging.info(f'not_done_comment_batches: {len(res)}')
+        return res
+
+    def admin_report_get_comments_stats(self, user_id=None, since_date=None, till_date=None):
+        params = {'admin_password': self.admin_password, 'report': 'comments_stats'}
+        if user_id is not None:
+            params['user_id'] = str(user_id)
+        if since_date is not None:
+            params['since_date'] = since_date.strftime("%m/%d/%Y, %H:%M:%S")
+        if till_date is not None:
+            params['till_date'] = till_date.strftime("%m/%d/%Y, %H:%M:%S")
+
+        res = self._get(self.host + admin_reports_endpoint, params,
+                        headers=self.get_admin_password_header(self.admin_password))
+        logging.info(f'comments_stats: {len(res)}')
         return res
 
     def admin_action_delete_user(self, user_id: str):
