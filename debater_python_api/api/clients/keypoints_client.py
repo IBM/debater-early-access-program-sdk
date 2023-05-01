@@ -120,9 +120,9 @@ class KpAnalysisClient(AbstractClient):
         :param batch_size: the number of comments that will be uploaded in every REST-API call.
         '''
         assert len(comments_ids) == len(comments_texts), 'comments_texts and comments_ids must be the same length'
-        assert len(comments_ids) == len(set(comments_ids)), 'comment_ids must be unique'
+        assert len(comments_ids) == len(set(comments_ids)), 'comments_ids must be unique'
         assert self._is_list_of_strings(comments_texts), 'comment_texts must be a list of strings'
-        assert self._is_list_of_strings(comments_ids), 'comment_ids must be a list of strings'
+        assert self._is_list_of_strings(comments_ids), 'comments_ids must be a list of strings'
         assert len([c for c in comments_texts if c is None or c == '' or len(c) == 0 or c.isspace()]) == 0, 'comment_texts must not have an empty string in it'
         logging.info('uploading %d comments in batches' % len(comments_ids))
 
@@ -170,7 +170,7 @@ class KpAnalysisClient(AbstractClient):
         Starts a Key Point Analysis (KPA) job in an async manner. Please make sure all comments had already been
         uploaded into a domain and processed before starting a new job (using the wait_till_all_comments_are_processed method).
         :param domain: the name of the domain
-        :param comments_ids: when None is passed, it uses all comments in the domain (typical usage) otherwise it only uses the comments according to the provided list of comment_ids.
+        :param comments_ids: when None is passed, it uses all comments in the domain (typical usage) otherwise it only uses the comments according to the provided list of comments_ids.
         :param run_params: a dictionary with different parameters and their values. For full documentation of supported run_params see https://github.com/IBM/debater-eap-tutorial/blob/main/survey_usecase/kpa_parameters.pdf
         :param description: add a description to a job so it will be easy to detect it in the user-report.
         :return: KpAnalysisTaskFuture: an object that enables the retrieval of the results in an async manner.
@@ -212,7 +212,7 @@ class KpAnalysisClient(AbstractClient):
 
         return self._get(self.host + kp_extraction_endpoint, params, timeout=180)
 
-    def run_for_domain(self, domain, comments_texts, comments_ids, run_params={}, run_per_stance=False):
+    def run_for_domain(self, domain, comments_texts, comments_ids, run_params={}, run_per_stance=False, description=None):
         logging.info('uploading comments')
         self.upload_comments(domain, comments_ids, comments_texts)
         logging.info('waiting for the comments to be processed')
@@ -223,22 +223,10 @@ class KpAnalysisClient(AbstractClient):
             logging.info('waiting for the key point analysis job to finish')
             keypoint_matching = future.get_result(high_verbosity=True)
         else:
-            logging.info('starting the key point analysis jobs')
-            run_params_stance = run_params.copy()
-            run_params_stance["stances_to_run"] = ["pos"]
-            future_pro = self.start_kp_analysis_job(domain, run_params=run_params_stance)
-
-            run_params_stance["stances_to_run"] = ["neg", "sug"]
-            future_con = self.start_kp_analysis_job(domain, run_params=run_params_stance)
-            logging.info('waiting for the key point analysis job to finish')
-            results_pro = future_pro.get_result(high_verbosity=True)
-            results_con = future_con.get_result(high_verbosity=True)
-            results_pro.set_stance_to_result("pro")
-            results_con.set_stance_to_result("con")
-            keypoint_matching = results_pro.merge_with_other(results_con)
+            self.run_kp_analysis_job_both_stances(domain, run_params, comments_ids=comments_ids, description=description)
         return keypoint_matching
 
-    def run(self, domain_name, comments_texts: List[str], run_per_stance = False, run_params = {}):
+    def run(self, domain_name, comments_texts: List[str], run_per_stance = False, run_params = {}, description=None):
         '''
         This is the simplest way to use the Key Point Analysis system.
         This method uploads the comments into a temporary domain, waits for them to be processed,
@@ -251,6 +239,7 @@ class KpAnalysisClient(AbstractClient):
         :param comments_texts: a list of comments (strings).
         :param run_per_stance: optional, default False. If true - performs the analysis for each stance separately and returns merged results.
         :param run_params: optional, run_params for the run.
+        :param description: add a description to a job so it will be easy to detect it in the user-report.
         :return: a KpaResult object with the result
         '''
         if len(comments_texts) > 10000:
@@ -267,7 +256,7 @@ class KpAnalysisClient(AbstractClient):
 
         comments_ids = [str(i) for i in range(len(comments_texts))]
         try:
-            keypoint_matching = self.run_for_domain(domain_name, comments_texts, comments_ids, run_params, run_per_stance)
+            keypoint_matching = self.run_for_domain(domain_name, comments_texts, comments_ids, run_params, run_per_stance, description=description)
 
         finally:
             self.delete_domain_cannot_be_undone(domain_name)
@@ -347,10 +336,10 @@ class KpAnalysisClient(AbstractClient):
 
     def get_sentences_for_domain(self, domain: str, job_id: Optional[str] = None):
         '''
-        Uploaded comments are cleaned and splitted into sentences. This method retrieves the sentences in a domain.
+        Uploaded comments are cleaned and split into sentences. This method retrieves the sentences in a domain.
         :param domain: the name of the domain.
         :param job_id: when provided, it will only return the sentences used in a specific key point analysis job.
-        :return: a dataframe with all the sentences' details.
+        :return: a dataframe with all the sentences' data.
         '''
         res = self._get(self.host + data_endpoint, {'domain': domain, 'get_sentences': True, 'job_id': job_id})
         logging.info(res['msg'])
@@ -425,6 +414,31 @@ class KpAnalysisClient(AbstractClient):
 
             for kp_analysis_status in kp_analysis_statuses:
                 logging.info(f'    Job: {str(kp_analysis_status)}')
+
+    def run_kp_analysis_job_both_stances(self, domain, run_params, comments_ids=None, description=None):
+        """
+        runs two Key Point Analysis (KPA) jobs, one for the positive stance and one for negative and suggestions,
+        waits for both jobs to finish and returns a merged result object.
+        Please make sure all comments had already been uploaded into a domain and processed before starting a new job (using the wait_till_all_comments_are_processed method).
+        :param domain: the name of the domain
+        :param comments_ids: when None is passed, it uses all comments in the domain (typical usage) otherwise it only uses the comments according to the provided list of comments_ids.
+        :param run_params: a dictionary with different parameters and their values. For full documentation of supported run_params see https://github.com/IBM/debater-eap-tutorial/blob/main/survey_usecase/kpa_parameters.pdf
+        the run_param "stances_to_run" is set by this method.
+        :param description: add a description to a job so it will be easy to detect it in the user-report.
+        :return: KpAnalysisTaskFuture: an object that enables the retrieval of the results in an async manner.
+        """
+        logging.info('starting the key point analysis jobs')
+        run_params_stance = run_params.copy()
+        run_params_stance["stances_to_run"] = ["pos"]
+        future_pro = self.start_kp_analysis_job(domain, run_params=run_params_stance, comments_ids=comments_ids, description=description)
+
+        run_params_stance["stances_to_run"] = ["neg", "sug"]
+        future_con = self.start_kp_analysis_job(domain, run_params=run_params_stance, comments_ids=comments_ids, description=description)
+        logging.info('waiting for the key point analysis job to finish')
+        results_pro = future_pro.get_result(high_verbosity=True)
+        results_con = future_con.get_result(high_verbosity=True)
+        keypoint_matching = KpaResult.get_merged_pro_con_results(pro_result=results_pro, con_result=results_con)
+        return keypoint_matching
 
 
 class KpAnalysisTaskFuture:
