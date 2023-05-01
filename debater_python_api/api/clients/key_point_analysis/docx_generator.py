@@ -117,11 +117,12 @@ def add_data_stats(dicts, nodes_ids, document, stance, min_n_matches):
     run.font.size = Pt(12)
 
 
-def sample_list_keep_order(list_to_sample, n_to_sample):
-    return [list_to_sample[i] for i in sorted(random.sample(range(len(list_to_sample)), n_to_sample))]
+def sample_list_keep_order(list_to_sample, n_to_sample, seed=0):
+    rng = random.Random(seed)
+    return [list_to_sample[i] for i in sorted(rng.sample(range(len(list_to_sample)), n_to_sample))]
 
 
-def save_hierarchical_graph_data_to_docx(full_result_df, graph_data, result_filename, n_matches=None, sort_by_subtree=True, include_match_score=False, min_n_matches=5):
+def save_hierarchical_graph_data_to_docx(full_result_df, graph_data, result_filename, n_matches=None, sort_by_subtree=True, include_match_score=False, min_n_matches=5, seed=0):
     def get_hierarchical_bullets_aux(document, id_to_kids, id_to_node, id, tab, id_to_paragraph, id_to_n_matches_subtree, sort_by_subtree=True, ids_order=[]):
         bullet = '\u25E6' if tab % 2 == 1 else '\u2022'
         msg = f'{("   " * tab)} {bullet} '
@@ -241,7 +242,7 @@ def save_hierarchical_graph_data_to_docx(full_result_df, graph_data, result_file
 
         matches_dicts = kp_to_dicts[kp]
         if n_matches is not None and n_matches < len(kp_to_dicts[kp]):
-            matches_dicts = sample_list_keep_order(matches_dicts, n_matches)
+            matches_dicts = sample_list_keep_order(matches_dicts, n_matches, seed=seed)
 
         logging.info(f'creating table for KP: {kp}, n_matches: {len(matches_dicts)}')
 
