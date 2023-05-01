@@ -78,7 +78,7 @@ class KpaResult:
                              sent_data["argument_quality"], kp_quality]
 
                 if 'stance' in sent_data:
-                    stance_dict = match['stance']
+                    stance_dict = sent_data['stance']
                     stance_tups = list(stance_dict.items())
                     stance_keys = [t[0] for t in stance_tups]
                     stance_scores = [float(t[1]) for t in stance_tups]
@@ -190,7 +190,7 @@ class KpaResult:
                 km['stance'] = stance
             result_json['keypoint_matchings'].append(km)
         if new_version:
-            result_json = KpaResult.create_from_result_json(result_json)
+            result_json = KpaResult.convert_to_v2(result_json)
         return result_json
 
     @staticmethod
@@ -198,6 +198,7 @@ class KpaResult:
         """
         Create KpaResults from results_json
         :param result_json: the json object obtained from the client via "get_results"
+        :return KpaResult object
         """
         if 'keypoint_matchings' not in result_json:
             raise KpaIllegalInputException("Faulty results json provided: does not contain 'keypoint_matchings'. returning empty results")
@@ -216,15 +217,15 @@ class KpaResult:
     def create_from_result_csv(result_csv):
         """
         Create KpaResults from results csv. Remains for backwards compatibility and will be removed in next versions.
-        :param result_csv : csv holding the full results.
-        : return KpaResult object
+        :param result_csv: csv holding the full results.
+        :return: KpaResult object
         """
         result_df = pd.read_csv(result_csv)
         result_json = KpaResult.result_df_to_result_json(result_df)
         return KpaResult(result_json)
 
     @staticmethod
-    # If json results are of ald version, convert to version 2.0
+    # If result_json is of the old version, convert to version 2.0
     def convert_to_v2(result_json):
         sentences_data = {}
         new_matchings = []
@@ -242,7 +243,7 @@ class KpaResult:
 
                 sent_identifier = get_unique_sent_id(match)
                 comment_id = match["comment_id"]
-                sent_id_in_comment = match["sentence_id"]
+                sent_id_in_comment = int(match["sentence_id"])
 
                 new_kp_matching["matching"].append({"sent_identifier":sent_identifier, "score":match["score"]})
 
@@ -268,13 +269,13 @@ class KpaResult:
         :param result_name: optional, name of the results to appear in the output files.
         :return: the full results and the summary results as dataframes
         """
-        if output_dir and result_name:
+        if output_dir is not None and result_name:
             result_file = os.path.join(output_dir, result_name+".csv")
             write_df_to_file(self.result_df, result_file)
 
             summary_file = result_file.replace(".csv", "_kps_summary.csv")
             write_df_to_file(self.summary_df, summary_file)
-        return self.full_df, self.summary_df
+        return self.result_df, self.summary_df
 
     @staticmethod
     def save_graph_data(graph_data, out_file):
@@ -310,13 +311,26 @@ class KpaResult:
 
         graph_data_hierarchical = graph_data_to_hierarchical_graph_data(graph_data=graph_data_full)
 
-        if output_dir and result_name:
+        if output_dir is not None and result_name:
             graph_filename = os.path.join(output_dir, result_name+'_graph_data.json')
             KpaResult.save_graph_data(graph_data_full, graph_filename)
             KpaResult.save_graph_data(graph_data_hierarchical,
                             graph_filename.replace('_graph_data.json', '_hierarchical_graph_data.json'))
 
         return graph_data_full, graph_data_hierarchical
+
+    def generate_docx_from_hierarchical_graph_data(self, graph_data_hierarchical, output_dir, result_name,
+                                                   filter_min_relations_for_text=0.4,
+                                                   n_matches_in_docx=50,
+                                                   include_match_score_in_docx=False,
+                                                   min_n_matches_in_docx=5):
+        graph_data_hierarchical = filter_graph_by_relation_strength(graph_data_hierarchical,
+                                                                    filter_min_relations_for_text)
+        docx_file = os.path.join(output_dir, f'{result_name}_hierarchical.docx')
+        save_hierarchical_graph_data_to_docx(full_result_df=self.result_df, graph_data=graph_data_hierarchical,
+                                             result_filename=docx_file, n_matches=n_matches_in_docx,
+                                             include_match_score=include_match_score_in_docx,
+                                             min_n_matches=min_n_matches_in_docx)
 
     def export_to_docx_report(self, output_dir, result_name,
                               min_n_similar_matches_in_graph = 5,
@@ -326,7 +340,7 @@ class KpaResult:
                               min_n_matches_in_docx=5
                               ):
         """
-        creates <result_file>_hierarchical.docx: This Microsoft Word document shows the key point hierarchy and matching sentences
+        creates <output_dir>/<result_name>_hierarchical.docx: This Microsoft Word document shows the key point hierarchy and matching sentences
          as a user-friendly report.
         :param output_dir: path to output directory
         :param result_name: name of the results to appear in the output files.
@@ -337,12 +351,11 @@ class KpaResult:
         :param min_n_matches_in_docx: remove key points with less than min_n_matches_in_docx matching sentences.
         """
         _, graph_data_hierarchical = self.export_to_graph_data(min_n_similar_matches_in_graph=min_n_similar_matches_in_graph)
-        graph_data_hierarchical = filter_graph_by_relation_strength(graph_data_hierarchical, filter_min_relations_for_text)
-        result_filename = os.path.join(output_dir, result_name + "_hierarchical.docx'")
-        save_hierarchical_graph_data_to_docx(full_result_df=self.result_df, graph_data=graph_data_hierarchical,
-                                             result_filename=result_filename, n_matches=n_matches_in_docx,
-                                             include_match_score=include_match_score_in_docx,
-                                             min_n_matches=min_n_matches_in_docx)
+        self.generate_docx_from_hierarchical_graph_data(graph_data_hierarchical, output_dir, result_name,
+                                                        filter_min_relations_for_text=filter_min_relations_for_text,
+                                                        n_matches_in_docx=n_matches_in_docx,
+                                                        include_match_score_in_docx=include_match_score_in_docx,
+                                                        min_n_matches_in_docx=min_n_matches_in_docx)
 
     def export_to_all_outputs(self, output_dir, result_name, min_n_similar_matches_in_graph=5, n_top_matches_in_graph=20,
                               filter_min_relations_for_text=0.4,
@@ -351,7 +364,7 @@ class KpaResult:
                               min_n_matches_in_docx=5
                               ):
         """
-        Generates all the kpa avvailable output types.
+        Generates all the kpa available output types.
         :param output_dir: path to output directory
         :param result_name: name of the results to appear in the output files.
         :param min_n_similar_matches_in_graph: the minimal number of matches that match both key points when calculating the relation between them.
@@ -374,28 +387,36 @@ class KpaResult:
         graph_data_full, graph_data_hierarchical = self.export_to_graph_data(output_dir=output_dir, result_name=result_name,
                              min_n_similar_matches_in_graph=min_n_similar_matches_in_graph,
                              n_top_matches_in_graph = n_top_matches_in_graph)
-        graph_data_hierarchical = filter_graph_by_relation_strength(graph_data_hierarchical,
-                                                                    filter_min_relations_for_text)
-        save_hierarchical_graph_data_to_docx(full_result_df=self.result_df, graph_data=graph_data_hierarchical,
-                                             output_dir=output_dir, result_name=result_name, n_matches=n_matches_in_docx,
-                                             include_match_score=include_match_score_in_docx,
-                                             min_n_matches=min_n_matches_in_docx)
+        self.generate_docx_from_hierarchical_graph_data(graph_data_hierarchical, output_dir, result_name,
+                                                        filter_min_relations_for_text=filter_min_relations_for_text,
+                                                        n_matches_in_docx=n_matches_in_docx,
+                                                        include_match_score_in_docx=include_match_score_in_docx,
+                                                        min_n_matches_in_docx=min_n_matches_in_docx)
+
 
     def generate_graphs_and_textual_summary_for_given_tree(self, hierarchical_data_file,
-                                                           output_dir, result_name, file_suff="_from_full",
+                                                           output_dir, result_name,
                                                            n_top_matches_in_graph=20,
                                                            filter_min_relations_for_text=0.4,
                                                            n_matches_in_docx=50,
                                                            include_match_score_in_docx=False,
                                                            min_n_matches_in_docx=5):
         '''
-        Create hierarchical results for kpa_result, using a precalculated hierarchical results hierarchical_data_file.
+        Create hierarchical result for kpa_result, using a precalculated hierarchical results hierarchical_data_file.
         This is useful when we first create hierarchical_data_file using the whole data, and then want to calculate the
         hierarchical result of its subset while considering the already existing hierarchy generated over the whole data.
         For example, when we have a large survey, we can first run over the entire data using the method
         export_to_graph_data to create a hierarchical representation of the results. Then when we
         want to evaluate a subset of the survey we can run over a subset of the survey and when we create its
         hierarchical representation we will use the hierarchical_data_file of the full survey.
+        :param hierarchical_data_file: hierarchical data file (json) of the precomputed full survey.
+        :param output_dir: path to output directory
+        :param result_name: name of the results to appear in the output files.
+        :param n_top_matches_in_graph : optional, number of top matches to add to the graph_data file.
+        :param filter_min_relations_for_text: optional, the minimal key points relation threshold, when creating the textual summaries.
+        :param n_matches_in_docx: optional, number of top matches to write in the textual summary (docx file). Pass None for all matches.
+        :param include_match_score_in_docx: optional, when set to true, the match score between the sentence and the key point is added.
+        :param min_n_matches_in_docx: optional, remove key points with less than min_n_matches_in_docx matching sentences.
         '''
         with open(hierarchical_data_file, "r") as f:
             graph_data_hierarchical = json.load(f)
@@ -408,12 +429,14 @@ class KpaResult:
             return
         new_hierarchical_graph_file = os.path.join(output_dir, result_name + "_hierarchical_graph_data.json")
         KpaResult.save_graph_data(new_hierarchical_graph_data, new_hierarchical_graph_file)
-        docx_file = os.path.join(output_dir, f'{result_name}{file_suff}_hierarchical.docx')
-        save_hierarchical_graph_data_to_docx(self.result_df, graph_data=new_hierarchical_graph_data,
-                                             result_filename=docx_file,
-                                             n_matches=n_matches_in_docx,
-                                             include_match_score=include_match_score_in_docx,
-                                             min_n_matches=min_n_matches_in_docx)
+
+        self.generate_docx_from_hierarchical_graph_data(new_hierarchical_graph_file, output_dir, result_name,
+                                                        filter_min_relations_for_text=0,
+                                                        n_matches_in_docx=n_matches_in_docx,
+                                                        include_match_score_in_docx=include_match_score_in_docx,
+                                                        min_n_matches_in_docx=min_n_matches_in_docx)
+
+
 
     def print_result(self, n_sentences_per_kp, title):
         '''
@@ -447,54 +470,38 @@ class KpaResult:
                 lines.extend(split_sentence_to_lines(sentence))
             return [('\t' * n_tabs) + line for line in lines]
 
-        def print_kp(kp, stance, n_matches, n_matches_subtree, depth, keypoint_matching, n_sentences_per_kp):
-            has_n_matches_subtree = n_matches_subtree is not None
-            print('%s%d%s - %s%s' % (('\t' * depth), n_matches_subtree if has_n_matches_subtree else n_matches,
-                                     (' - %d' % n_matches) if has_n_matches_subtree else '', kp,
-                                     '' if stance is None else ' - ' + stance))
-            sentences = [match['sentence_text'] for match in keypoint_matching['matching']]
+        def print_kp(kp, stance, keypoint_matching, sentences_data, n_sentences_per_kp):
+            print('%d - %s%s' % (len(keypoint_matching), kp, '' if stance is None else ' - ' + stance))
+            sentences = []
+            for match in keypoint_matching:
+                cid, sent_id_in_comment = get_cid_and_sid_from_sent_identifier(match["sent_identifier"])
+                sent = sentences_data[cid]['sentences'][sent_id_in_comment]["sentence_text"]
+                sentences.append(sent)
             sentences = sentences[1:(n_sentences_per_kp + 1)]  # first sentence is the kp itself
-            lines = split_sentences_to_lines(sentences, depth)
+            lines = split_sentences_to_lines(sentences, 0)
             for line in lines:
                 print('\t%s' % line)
 
-        kp_to_n_matches_subtree = defaultdict(int)
-        parents = list()
-        parent_to_kids = defaultdict(list)
-        for keypoint_matching in self.result_json['keypoint_matchings']:
-            kp = keypoint_matching['keypoint']
-            kp_to_n_matches_subtree[kp] += len(keypoint_matching['matching'])
-            parent = keypoint_matching.get("parent", None)
-            if parent is None or parent == 'root':
-                parents.append(keypoint_matching)
-            else:
-                parent_to_kids[parent].append(keypoint_matching)
-                kp_to_n_matches_subtree[parent] += len(keypoint_matching['matching'])
-
-        parents.sort(key=lambda x: kp_to_n_matches_subtree[x['keypoint']], reverse=True)
+        keypoint_matchings = self.result_json["keypoint_matchings"]
+        sentences_data = self.result_json["sentences_data"]
 
         n_total_sentences = self.get_number_of_unique_sentences(include_unmatched=True)
         n_matched_sentences = self.get_number_of_unique_sentences(include_unmatched=False)
 
         print(title + ' coverage: %.2f' % (float(n_matched_sentences) / float(n_total_sentences) * 100.0))
         print(title + ' key points:')
-        for parent in parents:
-            kp = parent['keypoint']
-            stance = None if 'stance' not in parent else parent['stance']
+        for keypoint_matching in keypoint_matchings:
+            kp = keypoint_matching['keypoint']
+            stance = None if 'stance' not in keypoint_matching else keypoint_matching['stance']
             if kp == 'none':
                 continue
-            print_kp(kp, stance, len(parent['matching']),
-                     None if len(parent_to_kids[kp]) == 0 else kp_to_n_matches_subtree[kp], 0, parent, n_sentences_per_kp)
-            for kid in parent_to_kids[kp]:
-                kid_kp = kid['keypoint']
-                kid_stance = None if 'stance' not in kid else kid['stance']
-                print_kp(kid_kp, kid_stance, len(kid['matching']), None, 1, kid, n_sentences_per_kp)
+            print_kp(kp, stance, keypoint_matching['matching'], sentences_data, n_sentences_per_kp)
 
     def get_number_of_unique_sentences(self, include_unmatched=True):
         total_sentences = set()
         for i, keypoint_matching in enumerate(self.result_json['keypoint_matchings']):
             matches = keypoint_matching['matching']
-            matching_sents_ids = set([get_unique_sent_id(d) for d in matches])
+            matching_sents_ids = set([d["sent_identifier"] for d in matches])
             if keypoint_matching['keypoint'] != 'none' or include_unmatched:
                 total_sentences = total_sentences.union(matching_sents_ids)
         return len(total_sentences)
@@ -504,13 +511,20 @@ class KpaResult:
                        if kp['keypoint'] != 'none' or include_none}
         return kps_n_args
 
-    def compare_with_other(self, other_results, this_title, other_title):
+    def compare_with_other(self, other_result, this_title, other_title):
+        """
+        Compare this result with another
+        :param other_result: other results to compare with
+        :param this_title: title to be associated with this result
+        :param other_title: title to be associated with other_result
+        :return a dataframe that compares the prevalence of all kps in the two results
+        """
         result_1_total_sentences = self.get_number_of_unique_sentences(include_unmatched=True)
         kps1_n_args = self.get_kp_to_n_matched_sentences(include_none=False)
         kps1 = set(kps1_n_args.keys())
 
-        result_2_total_sentences = other_results.get_number_of_unique_sentences(include_unmatched=True)
-        kps2_n_args = other_results.get_kp_to_n_matched_sentences(include_none=False)
+        result_2_total_sentences = other_result.get_number_of_unique_sentences(include_unmatched=True)
+        kps2_n_args = other_result.get_kp_to_n_matched_sentences(include_none=False)
         kps2 = set(kps2_n_args.keys())
 
         kps_in_both = kps1.intersection(kps2)
@@ -540,25 +554,53 @@ class KpaResult:
         comparison_df = pd.DataFrame(rows, columns=cols)
         return comparison_df
 
-    def merge_with_other(self, other_results):
-        combined_results_json = {'keypoint_matchings': self.result_json['keypoint_matchings'] + other_results.result_json['keypoint_matchings']}
-        combined_results_json['keypoint_matchings'].sort(key=lambda matchings: len(matchings['matching']), reverse=True)
-        return KpaResult.create_from_result_json(result_json = combined_results_json)
+    def merge_with_other(self, other_result):
+        """
+        Return a KpaResults with the combined results of this KpaResult and other_result
+        :param other_result: KpaResult object to merge with this one
+        """
+        keypoint_matchings = self.result_json['keypoint_matchings'] + other_result.result_json['keypoint_matchings']
+        keypoint_matchings.sort(key=lambda matchings: len(matchings['matching']), reverse=True)
+
+        sentences_data = self.result_json['sentences_data']
+        for comment_id, comment_data_dict in other_result.result_json["sentences_data"].items():
+            if comment_id not in sentences_data:
+                sentences_data[comment_id] = {"sents_in_comment":comment_data_dict["sents_in_comment"], "sentences":{}}
+            for sent_id_in_comment, sent_data in comment_data_dict:
+                sentences_data[comment_id]["sentences"][sent_id_in_comment] = sent_data
+        combined_results_json = {'keypoint_matchings':keypoint_matchings, "sentences_data":sentences_data, "version":CURR_RESULTS_VERSION}
+        return KpaResult.create_from_result_json(combined_results_json)
 
     def set_stance_to_result(self, stance):
+        """
+        set the stance of all the key points to 'stance'
+        """
         for keypoint_matching in self.result_json['keypoint_matchings']:
             keypoint_matching['stance'] = stance
         self.result_df["stance"] = stance
 
+    @staticmethod
+    def get_merged_pro_con_results(pro_result, con_result):
+        """
+        Combines the results from pro_result and con_result and returns a merged KpaResult
+        """
+        pro_result.set_stance_to_result("pro")
+        con_result.set_stance_to_result("con")
+        return pro_result.merge_with_other(con_result)
+
 
 if __name__ == "__main__":
     init_logger()
-    #result_csv = "/Users/lilache/Library/CloudStorage/Box-Box/interview_analysis/austin_results/new_match_models/per_year_results/2018/standalone/Q25/austin_2018_Q25_new_models_neg.csv"
-    result_csv = "/Users/lilache/Library/CloudStorage/Box-Box/interview_analysis/debater_p_results/2022/final/v0_multi_kps_sbert_stage2_15/eng_kp_input_2022_simplified_multi_kps_merged_kpa_results.csv"
-    kpa_json_results_old = KpaResult.result_df_to_result_json(pd.read_csv(result_csv), new_version=False)
-    with open("old_json_eng.json", 'w') as f:
-        json.dump(kpa_json_results_old, f)
-
-    new_json = KpaResult.convert_to_v2(kpa_json_results_old)
-    with open("new_json2_eng.json", 'w') as f:
-        json.dump(new_json, f)
+    result_csv = "/Users/lilache/Library/CloudStorage/Box-Box/interview_analysis/austin_results/new_match_models/per_year_results/2018/standalone/Q25/austin_2018_Q25_new_models_neg.csv"
+    #result_csv = "/Users/lilache/Library/CloudStorage/Box-Box/interview_analysis/debater_p_results/2022/final/v0_multi_kps_sbert_stage2_15/eng_kp_input_2022_simplified_multi_kps_merged_kpa_results.csv"
+    # kpa_json_results_old = KpaResult.result_df_to_result_json(pd.read_csv(result_csv), new_version=False)
+    # with open("old_json.json", 'w') as f:
+    #     json.dump(kpa_json_results_old, f)
+    #
+    # new_json = KpaResult.convert_to_v2(kpa_json_results_old)
+    # with open("new_json2.json", 'w') as f:
+    #     json.dump(new_json, f)
+    kpa_result = KpaResult.create_from_result_csv(result_csv)
+    kpa_result.save("new_austin_result.json")
+    #kpa_result.print_result(2, "test")
+    kpa_result.export_to_all_outputs("","test_all_outputs")
