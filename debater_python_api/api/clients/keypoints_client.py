@@ -110,7 +110,8 @@ class KpAnalysisClient(AbstractClient):
     def upload_comments(self, domain: str, comments_ids: List[str], comments_texts: List[str], batch_size: int = 2000) -> None:
         '''
         Uploads comments into a domain. It is mandatory to create a domain before uploading comments into it.
-        Re-uploading the same comments (same domain + comment_id + text) is relatively quick. # TODO: WHEN UPLOADING WITH SAME ID AND NEW TEXT??
+        Re-uploading the same comments (same domain + comment_id + text) is relatively quick.
+        Uploading an the same comment_id with a different text will raise an exception.
         Processing comments (cleaning + sentence splitting + calculating scores) takes some time,
         please wait for it to finish before starting a key point analysis job (using method wait_till_all_comments_are_processed).
         :param domain: the name of the domain to upload the comments into. (usually one  per data-set).
@@ -226,16 +227,16 @@ class KpAnalysisClient(AbstractClient):
             self.run_kp_analysis_job_both_stances(domain, run_params, comments_ids=comments_ids, description=description)
         return keypoint_matching
 
-    def run(self, domain_name, comments_texts: List[str], run_per_stance = False, run_params = {}, description=None):
+    def run(self, domain, comments_texts: List[str], run_per_stance = False, run_params = {}, description=None):
         '''
         This is the simplest way to use the Key Point Analysis system.
         This method uploads the comments into a temporary domain, waits for them to be processed,
         starts a Key Point Analysis job using all comments, and waits for the results. Eventually, the domain is deleted.
         It is possible to use this method for up to 10000 comments. For longer jobs, please run the system in a staged
         manner (upload the comments yourself, start a job etc').
-        If execution stopped before this method returned, please run client.delete_domain_cannot_be_undone(<domain_name>)
+        If execution stopped before this method returned, please run client.delete_domain_cannot_be_undone(<domain>)
         to free resources and avoid longer waiting in future calls.  TODO Remove comment?
-        :param domain_name: name of the temporary domain to store the comments. Must not be an existing domain.
+        :param domain: name of the temporary domain to store the comments. if the domain already exists, it is deleted and created again.
         :param comments_texts: a list of comments (strings).
         :param run_per_stance: optional, default False. If true - performs the analysis for each stance separately and returns merged results.
         :param run_params: optional, run_params for the run.
@@ -245,21 +246,15 @@ class KpAnalysisClient(AbstractClient):
         if len(comments_texts) > 10000:
             raise Exception('Please use the stagged mode (upload_comments, start_kp_analysis_job) for jobs with more then 10000 comments')
 
-        try:
-            self.create_domain(domain_name, domain_params={"do_stance_analysis":True})
-        except KpaIllegalInputException as e:
-            if 'already exist' not in str(e):
-                raise e
-            else:
-                raise KpaIllegalInputException(f'domain: {domain_name} already exists, please select another domain_name or delete '
-                         f'this domain first by running client.delete_domain_cannot_be_undone({domain_name})')
+        self.delete_domain_cannot_be_undone(domain)
+        self.create_domain(domain, domain_params={"do_stance_analysis":True})
 
         comments_ids = [str(i) for i in range(len(comments_texts))]
         try:
-            keypoint_matching = self.run_for_domain(domain_name, comments_texts, comments_ids, run_params, run_per_stance, description=description)
+            keypoint_matching = self.run_for_domain(domain, comments_texts, comments_ids, run_params, run_per_stance, description=description)
 
         finally:
-            self.delete_domain_cannot_be_undone(domain_name)
+            self.delete_domain_cannot_be_undone(domain)
         return keypoint_matching
 
     def cancel_kp_extraction_job(self, job_id: str):
@@ -423,10 +418,12 @@ class KpAnalysisClient(AbstractClient):
         :param domain: the name of the domain
         :param comments_ids: when None is passed, it uses all comments in the domain (typical usage) otherwise it only uses the comments according to the provided list of comments_ids.
         :param run_params: a dictionary with different parameters and their values. For full documentation of supported run_params see https://github.com/IBM/debater-eap-tutorial/blob/main/survey_usecase/kpa_parameters.pdf
-        the run_param "stances_to_run" is set by this method.
+        the run_param "stances_to_run" must not be set.
         :param description: add a description to a job so it will be easy to detect it in the user-report.
-        :return: KpAnalysisTaskFuture: an object that enables the retrieval of the results in an async manner.
+        :return KpaResult: an object that enables the retrieval of the results in an async manner.
         """
+        if "stances_to_run" in run_params:
+            raise KpaIllegalInputException("stances_to_run can't be set when running per stance")
         logging.info('starting the key point analysis jobs')
         run_params_stance = run_params.copy()
         run_params_stance["stances_to_run"] = ["pos"]
