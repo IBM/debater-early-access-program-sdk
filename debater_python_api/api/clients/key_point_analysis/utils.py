@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -83,3 +84,37 @@ def get_cid_and_sid_from_sent_identifier(sent_identifier):
     sent_id = int(splits[-1])
     cid = "_".join(splits[:-1])
     return cid, sent_id
+
+
+def validate_api_key_or_throw_exception(apikey):
+    if len(apikey) != 35 or re.match('^[0-9a-zA-Z]+$', apikey) is None:
+        raise ValueError("api key is not valid")
+    return True
+
+
+def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█'):
+    """
+    Call in a loop to create terminal progress bar
+    @params:
+        iteration   - Required  : current iteration (Int)
+        total       - Required  : total iterations (Int)
+        prefix      - Optional  : prefix string (Str)
+        suffix      - Optional  : suffix string (Str)
+        decimals    - Optional  : positive number of decimals in percent complete (Int)
+        length      - Optional  : character length of bar (Int)
+        fill        - Optional  : bar fill character (Str)
+        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
+    """
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filledLength = int(length * iteration // total)
+    bar = fill * filledLength + '-' * (length - filledLength)
+    print(f'{prefix} |{bar}| {percent}% {suffix}\n')
+    # Print New Line on Complete
+    if iteration == total:
+        print()
+
+def get_default_request_header(apikey):
+    return {'accept-encoding': 'gzip, deflate',
+            'content-type': 'application/json',
+            'charset': 'UTF-8',
+            'apikey': apikey}

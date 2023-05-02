@@ -2,7 +2,6 @@ import json
 import logging
 import pandas as pd
 import numpy as np
-from debater_python_api.api.clients.key_point_analysis.docx_generator import save_hierarchical_graph_data_to_docx
 from debater_python_api.api.clients.key_point_analysis.utils import create_dict_to_list, read_dicts_from_df
 
 

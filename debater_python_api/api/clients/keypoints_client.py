@@ -4,14 +4,12 @@ import calendar
 import traceback
 
 import pandas as pd
-from utils import update_row_with_stance_data
 import requests
 
 from KpaResult import KpaResult
-from debater_python_api.api.clients.abstract_client import AbstractClient
-from debater_python_api.utils.general_utils import get_default_request_header
+from debater_python_api.api.clients.key_point_analysis.utils import get_default_request_header, update_row_with_stance_data, validate_api_key_or_throw_exception, print_progress_bar
+
 from typing import List, Optional, Dict
-from debater_python_api.utils.kp_analysis_utils import print_progress_bar
 from debater_python_api.api.clients.key_point_analysis.KpaExceptions import KpaIllegalInputException
 
 domains_endpoint = '/domains'
@@ -23,7 +21,7 @@ comments_limit_endpoint = '/comments_limit'
 self_check_endpoint = '/self_check'
 
 
-class KpAnalysisClient(AbstractClient):
+class KpAnalysisClient():
     '''
     A client for the Key Point Analysis (KPA) service.
     '''
@@ -33,7 +31,9 @@ class KpAnalysisClient(AbstractClient):
         :param host: optional, enable switching to alternative services.
         :param allow_self_signed_certificates: optional, enable self-signed TLS certificate, default False
         '''
-        AbstractClient.__init__(self, apikey)
+        validate_api_key_or_throw_exception(apikey)
+        self.apikey = apikey
+        self.show_process = True
         self.host = host if host is not None else 'https://keypoint-matching-backend.debater.res.ibm.com'
         self.allow_self_signed_certs = allow_self_signed_certificates
 
@@ -128,7 +128,7 @@ class KpAnalysisClient(AbstractClient):
         logging.info('uploading %d comments in batches' % len(comments_ids))
 
         ids_texts = list(zip(comments_ids, comments_texts))
-        ids_texts.sort(lambda t: len(t[1]))
+        ids_texts.sort(key=lambda t: len(t[1]))
         batch_size = 2000
         uploaded = 0
         batches = [ids_texts[i:i + batch_size] for i in range(0, len(ids_texts), batch_size)]
