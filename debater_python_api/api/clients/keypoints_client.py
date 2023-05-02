@@ -107,7 +107,7 @@ class KpAnalysisClient(AbstractClient):
 
             logging.info(f'domain: {domain} already exists, domain_params are NOT updated.')
 
-    def upload_comments(self, domain: str, comments_ids: List[str], comments_texts: List[str], batch_size: int = 2000) -> None:
+    def upload_comments(self, domain: str, comments_ids: List[str], comments_texts: List[str]) -> None:
         '''
         Uploads comments into a domain. It is mandatory to create a domain before uploading comments into it.
         Re-uploading the same comments (same domain + comment_id + text) is relatively quick.
@@ -117,17 +117,18 @@ class KpAnalysisClient(AbstractClient):
         :param domain: the name of the domain to upload the comments into. (usually one  per data-set).
         :param comments_ids: a list of comment ids (strings), comment ids must be unique.
         :param comments_texts: a list of comments (strings), this list must be the same length as comments_ids and the comment_id and comment_text should match by position in the list.
-        :param batch_size: the number of comments that will be uploaded in every REST-API call.
         '''
         assert len(comments_ids) == len(comments_texts), 'comments_texts and comments_ids must be the same length'
         assert len(comments_ids) == len(set(comments_ids)), 'comments_ids must be unique'
         assert self._is_list_of_strings(comments_texts), 'comment_texts must be a list of strings'
         assert self._is_list_of_strings(comments_ids), 'comments_ids must be a list of strings'
         assert len([c for c in comments_texts if c is None or c == '' or len(c) == 0 or c.isspace()]) == 0, 'comment_texts must not have an empty string in it'
-        assert len([c for c in comments_texts if len(c) > 3000]) == 0, 'comment_texts must be shorter than 3000 charachters'
+        assert len([c for c in comments_texts if len(c)>3000]) == 0, 'comment_texts must be shorter than 3000 characters'
         logging.info('uploading %d comments in batches' % len(comments_ids))
 
         ids_texts = list(zip(comments_ids, comments_texts))
+        ids_texts.sort(lambda t: len(t[1]))
+        batch_size = 2000
         uploaded = 0
         batches = [ids_texts[i:i + batch_size] for i in range(0, len(ids_texts), batch_size)]
         for batch in batches:
