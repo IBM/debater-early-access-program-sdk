@@ -184,7 +184,21 @@ class KpAnalysisClient(AbstractClient):
             logging.info('waiting for the key point analysis job to finish')
             keypoint_matching = future.get_result(high_verbosity=True)
         else:
-            keypoint_matching = self.run_kp_analysis_job_both_stances(domain, run_params, comments_ids=comments_ids, description=description)
+            if "stances_to_run" in run_params:
+                raise KpaIllegalInputException("stances_to_run can't be set when running per stance")
+            logging.info('starting the key point analysis jobs')
+            run_params_stance = run_params.copy()
+            run_params_stance["stances_to_run"] = ["pos"]
+            future_pro = self.run_kpa_job_async(domain, run_params=run_params_stance, comments_ids=comments_ids,
+                                                description=description)
+
+            run_params_stance["stances_to_run"] = ["neg", "sug"]
+            future_con = self.run_kpa_job_async(domain, run_params=run_params_stance, comments_ids=comments_ids,
+                                                description=description)
+            logging.info('waiting for the key point analysis job to finish')
+            results_pro = future_pro.get_result(high_verbosity=True)
+            results_con = future_con.get_result(high_verbosity=True)
+            keypoint_matching = KpaResult.get_merged_pro_con_results(pro_result=results_pro, con_result=results_con)
         return keypoint_matching
 
 
@@ -214,7 +228,7 @@ class KpAnalysisClient(AbstractClient):
         logging.info(f'started a kp analysis job - domain: {domain}, run_params: {run_params}, {"" if description is None else f"description: {description}, "}job_id: {res["job_id"]}')
         return KpAnalysisTaskFuture(self, res['job_id'])
 
-    def get_kp_extraction_job_status(self, job_id: str, top_k_kps: Optional[int] = None,
+    def get_kpa_job_status(self, job_id: str, top_k_kps: Optional[int] = None,
                                      top_k_sentences_per_kp: Optional[int] = None):
         '''
         Checks for the status of a key point analysis job. It returns a json with a 'status' key that can have one of the following values: PENDING, PROCESSING, DONE, CANCELED, ERROR
@@ -270,7 +284,7 @@ class KpAnalysisClient(AbstractClient):
             self.delete_domain_cannot_be_undone(domain)
         return keypoint_matching
 
-    def cancel_kp_extraction_job(self, job_id: str):
+    def cancel_kpa_job(self, job_id: str):
         '''
         Stops a running key point analysis job.
         :param job_id: the job_id
@@ -278,7 +292,7 @@ class KpAnalysisClient(AbstractClient):
         '''
         return self._delete(self.host + kp_extraction_endpoint, {'job_id': job_id})
 
-    def cancel_all_extraction_jobs_for_domain(self, domain: str):
+    def cancel_all_kpa_jobs_for_domain(self, domain: str):
         '''
         Stops all running jobs and cancels all pending jobs in a domain.
         :param domain: the name of the domain.
@@ -286,7 +300,7 @@ class KpAnalysisClient(AbstractClient):
         '''
         return self._delete(self.host + data_endpoint, {'domain': domain, 'clear_kp_analysis_jobs_log': False, 'clear_db': False})
 
-    def cancel_all_extraction_jobs_all_domains(self):
+    def cancel_all_kpa_jobs_all_domains(self):
         '''
         Stops all running jobs and cancels all pending jobs in all domains.
         :return: the request's response
@@ -423,22 +437,6 @@ class KpAnalysisClient(AbstractClient):
             for kp_analysis_status in kp_analysis_statuses:
                 logging.info(f'    Job: {str(kp_analysis_status)}')
 
-    def run_kp_analysis_job_both_stances(self, domain, run_params, comments_ids=None, description=None):
-        if "stances_to_run" in run_params:
-            raise KpaIllegalInputException("stances_to_run can't be set when running per stance")
-        logging.info('starting the key point analysis jobs')
-        run_params_stance = run_params.copy()
-        run_params_stance["stances_to_run"] = ["pos"]
-        future_pro = self.run_kpa_job_async(domain, run_params=run_params_stance, comments_ids=comments_ids, description=description)
-
-        run_params_stance["stances_to_run"] = ["neg", "sug"]
-        future_con = self.run_kpa_job_async(domain, run_params=run_params_stance, comments_ids=comments_ids, description=description)
-        logging.info('waiting for the key point analysis job to finish')
-        results_pro = future_pro.get_result(high_verbosity=True)
-        results_con = future_con.get_result(high_verbosity=True)
-        keypoint_matching = KpaResult.get_merged_pro_con_results(pro_result=results_pro, con_result=results_con)
-        return keypoint_matching
-
 
 class KpAnalysisTaskFuture:
     '''
@@ -479,7 +477,7 @@ class KpAnalysisTaskFuture:
 
         do_again = True
         while do_again:
-            result = self.client.get_kp_extraction_job_status(self.job_id, top_k_kps=top_k_kps, top_k_sentences_per_kp=top_k_sentences_per_kp)
+            result = self.client.get_kpa_job_status(self.job_id, top_k_kps=top_k_kps, top_k_sentences_per_kp=top_k_sentences_per_kp)
             if result['status'] == 'PENDING':
                 if high_verbosity:
                     logging.info('job_id %s is pending' % self.job_id)
@@ -510,7 +508,7 @@ class KpAnalysisTaskFuture:
         '''
         Cancels (stops) the running job. Please stop unneeded jobs since they use a lot of resources.
         '''
-        self.client.cancel_kp_extraction_job(self.job_id)
+        self.client.cancel_kpa_job(self.job_id)
 
     def _print_progress_bar(self, progress):
         if 'total_stages' in progress:
