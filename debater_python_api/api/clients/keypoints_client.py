@@ -2,6 +2,7 @@ import logging
 import time
 import calendar
 import traceback
+from enum import Enum
 
 import pandas as pd
 import requests
@@ -167,8 +168,28 @@ class KpAnalysisClient():
                 break
             time.sleep(polling_timeout_secs if polling_timeout_secs is not None else 10)
 
+    @staticmethod
+    def get_run_params_with_stance(run_params, stance):
+        assert "stances_to_run" not in run_params, "stances_to_run is set interanlly by the client, please use the 'stance' method parameter instead."
+        if not stance:
+            return run_params
+        if not run_params:
+            run_params = {}
+        else:
+            run_params = run_params.copy()
+
+        if not stance:
+            return run_params
+        elif stance == "pro":
+            run_params["stances_to_run"] = ["pos"]
+        elif stance == "con":
+            run_params["stances_to_run"] = ["neg","sug"]
+        else:
+            raise KpaIllegalInputException(f"Unsupported stance for async run: {stance}, supported: pro, con.")
+        return run_params
+
     def run_kpa_job(self, domain: str, comments_ids: Optional[List[str]]=None,
-                              run_params=None, description: Optional[str]=None, run_per_stance = False):
+                              run_params=None, description: Optional[str]=None, stance: Optional[str]=None):
         """
         Runs Key Point Analysis (KPA) in a synchronous manner: starts the job, waits for the results and return them.
         Please make sure all comments had already been uploaded into a domain and processed before starting a new job (using the wait_till_all_comments_are_processed method).
@@ -176,35 +197,31 @@ class KpAnalysisClient():
         :param comments_ids: optional, when None is passed, it uses all comments in the domain (typical usage) otherwise it only uses the comments according to the provided list of comments_ids.
         :param run_params: optional,a dictionary with different parameters and their values. For full documentation of supported run_params see https://github.com/IBM/debater-eap-tutorial/blob/main/survey_usecase/kpa_parameters.pdf
         :param description: optional, add a description to a job so it will be easy to detect it in the user-report.
-        :param run_per_stance: If false - runs once with the given run_params. if True: starts two jobs, one for pro (positive comments) and one
+        :param stance: Optional, default to None. If None - run on all the data without regarding the stance. If "pro", run on positive sentences only,
+        if "con", run on negative sentences (negative and suggestions). If "each_stance", starts two kpa jobs, one for each stance, and
+        returns the merged result.
         for con (negative comments + suggestions), waits for both results and merge them to a single result object.
         :return: a KpaResult object with the result. if running per stance - returns the merged pro and con results.
         """
-        if not run_per_stance:
-            logging.info('starting the key point analysis job')
-            future = self.run_kpa_job_async(domain, run_params=run_params, comments_ids=comments_ids, description=description)
+        if stance != "each_stance":
+            future = self.run_kpa_job_async(domain, run_params=run_params, comments_ids=comments_ids, stance= stance, description=description)
             logging.info('waiting for the key point analysis job to finish')
             keypoint_matching = future.get_result(high_verbosity=True)
         else:
-            if "stances_to_run" in run_params:
-                raise KpaIllegalInputException("stances_to_run can't be set when running per stance")
-            logging.info('starting the key point analysis jobs')
-            run_params_stance = run_params.copy()
-            run_params_stance["stances_to_run"] = ["pos"]
-            future_pro = self.run_kpa_job_async(domain, run_params=run_params_stance, comments_ids=comments_ids,
+            future_pro = self.run_kpa_job_async(domain, run_params=run_params, stance="pro", comments_ids=comments_ids,
                                                 description=description)
 
-            run_params_stance["stances_to_run"] = ["neg", "sug"]
-            future_con = self.run_kpa_job_async(domain, run_params=run_params_stance, comments_ids=comments_ids,
+            future_con = self.run_kpa_job_async(domain, run_params=run_params, stance="con", comments_ids=comments_ids,
                                                 description=description)
-            logging.info('waiting for the key point analysis job to finish')
+
+            logging.info('waiting for the key point analysis jobs to finish')
             results_pro = future_pro.get_result(high_verbosity=True)
             results_con = future_con.get_result(high_verbosity=True)
             keypoint_matching = KpaResult.get_merged_pro_con_results(pro_result=results_pro, con_result=results_con)
         return keypoint_matching
 
 
-    def run_kpa_job_async(self, domain: str, comments_ids: Optional[List[str]]=None,
+    def run_kpa_job_async(self, domain: str, comments_ids: Optional[List[str]]=None, stance = None,
                               run_params=None, description: Optional[str]=None) -> 'KpAnalysisTaskFuture':
         """
         Starts a Key Point Analysis (KPA) job in an async manner. Please make sure all comments had already been
@@ -212,6 +229,8 @@ class KpAnalysisClient():
         :param domain: the name of the domain
         :param comments_ids: optional, when None is passed, it uses all comments in the domain (typical usage) otherwise it only uses the comments according to the provided list of comments_ids.
         :param run_params: optional, a dictionary with different parameters and their values. For full documentation of supported run_params see https://github.com/IBM/debater-eap-tutorial/blob/main/survey_usecase/kpa_parameters.pdf
+        :param stance: Optional, default to None. If None - run on all the data without regarding the stance. If "pro", run on positive sentences only,
+        if "con", run on con sentences (negative and suggestions).
         :param description: optional, add a description to a job so it will be easy to detect it in the user-report.
         :return: KpAnalysisTaskFuture: an object that enables the retrieval of the results in an async manner.
         """
@@ -220,6 +239,7 @@ class KpAnalysisClient():
         if comments_ids is not None:
             body['comments_ids'] = comments_ids
 
+        run_params = KpAnalysisClient.get_run_params_with_stance(run_params, stance)
         if run_params is not None:
             body['run_params'] = run_params
 
@@ -227,7 +247,7 @@ class KpAnalysisClient():
             body['description'] = description
 
         res = self._post(url=self.host + kp_extraction_endpoint, body=body)
-        logging.info(f'started a kp analysis job - domain: {domain}, run_params: {run_params}, {"" if description is None else f"description: {description}, "}job_id: {res["job_id"]}')
+        logging.info(f'started a kp analysis job - domain: {domain}, stance: {stance}, run_params: {run_params}, {"" if description is None else f"description: {description}, "}job_id: {res["job_id"]}')
         return KpAnalysisTaskFuture(self, res['job_id'])
 
     def get_kpa_job_status(self, job_id: str, top_k_kps: Optional[int] = None,
@@ -252,7 +272,7 @@ class KpAnalysisClient():
 
         return self._get(self.host + kp_extraction_endpoint, params, timeout=180)
 
-    def run_full_kpa_flow(self, domain, comments_texts: List[str], run_per_stance = False, run_params = {}, description=None):
+    def run_full_kpa_flow(self, domain, comments_texts: List[str], stance = None, run_params = {}, description=None):
         '''
         This is the simplest way to use the Key Point Analysis system.
         This method uploads the comments into a temporary domain, waits for them to be processed,
@@ -263,13 +283,15 @@ class KpAnalysisClient():
         to free resources and avoid longer waiting in future calls.  TODO Remove comment?
         :param domain: name of the temporary domain to store the comments. if the domain already exists, it is deleted and created again.
         :param comments_texts: a list of comments (strings).
-        :param run_per_stance: optional, default False. If true - performs the analysis for each stance separately and returns merged results.
+        :param stance: Optional, default to None. If None - run on all the data without regarding the stance. If "pro", run on positive sentences only,
+        if "con", run on negative sentences (negative and suggestions). If "each_stance", starts two kpa jobs, one for each stance, and
+        returns the merged result.
         :param run_params: optional, run_params for the run.
         :param description: add a description to a job so it will be easy to detect it in the user-report.
         :return: a KpaResult object with the result
         '''
         if len(comments_texts) > 10000:
-            raise Exception('Please use the stagged mode (upload_comments, run_kpa_job_async) for jobs with more then 10000 comments')
+            raise Exception('Please use the stagged mode (upload_comments, run_kpa_job) for jobs with more then 10000 comments')
         try:
             logging.info(f'Deleting domain {domain}')
             self.delete_domain_cannot_be_undone(domain)
@@ -280,11 +302,11 @@ class KpAnalysisClient():
             self.upload_comments(domain, comments_ids, comments_texts)
             logging.info('waiting for the comments to be processed')
             self.wait_till_all_comments_are_processed(domain)
-            keypoint_matching = self.run_kpa_job(domain, run_params=run_params, description=description, run_per_stance=run_per_stance)
-
+            keypoint_matching = self.run_kpa_job(domain, run_params=run_params, description=description, stance = stance)
+            return keypoint_matching
         finally:
             self.delete_domain_cannot_be_undone(domain)
-        return keypoint_matching
+
 
     def cancel_kpa_job(self, job_id: str):
         '''
