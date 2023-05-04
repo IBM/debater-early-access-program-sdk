@@ -233,7 +233,7 @@ class KpAnalysisClient():
         :param description: optional, add a description to a job so it will be easy to detect it in the user-report.
         :return: KpAnalysisTaskFuture: an object that enables the retrieval of the results in an async manner.
         """
-        body = {'domain': domain}
+        body = {'domain': domain, "api_version" : "2"}
 
         if comments_ids is not None:
             body['comments_ids'] = comments_ids
@@ -313,7 +313,11 @@ class KpAnalysisClient():
         :param job_id: the job_id
         :return: the request's response
         '''
-        return self._delete(self.host + kp_extraction_endpoint, {'job_id': job_id})
+        logging.info(f"Canceling job {job_id}")
+        try:
+            return self._delete(self.host + kp_extraction_endpoint, {'job_id': job_id})
+        except KpaIllegalInputException as e:
+            return
 
     def cancel_all_kpa_jobs_for_domain(self, domain: str):
         '''
@@ -321,6 +325,7 @@ class KpAnalysisClient():
         :param domain: the name of the domain.
         :return: the request's response
         '''
+        logging.info(f"Canceling all jobs for domain {domain}")
         return self._delete(self.host + data_endpoint, {'domain': domain, 'clear_kp_analysis_jobs_log': False, 'clear_db': False})
 
     def cancel_all_kpa_jobs_all_domains(self):
@@ -328,6 +333,7 @@ class KpAnalysisClient():
         Stops all running jobs and cancels all pending jobs in all domains.
         :return: the request's response
         '''
+        logging.info(f"Canceling all jobs for all domains.")
         return self._delete(self.host + data_endpoint, {'clear_kp_analysis_jobs_log': False, 'clear_db': False})
 
     def delete_domain_cannot_be_undone(self, domain: str):
