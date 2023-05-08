@@ -195,7 +195,8 @@ class KpAnalysisClient():
         :param domain: the name of the domain
         :param comments_ids: optional, when None is passed, it uses all comments in the domain (typical usage) otherwise it only uses the comments according to the provided list of comments_ids.
         :param run_params: optional,a dictionary with different parameters and their values. For full documentation of supported run_params see https://github.com/IBM/debater-eap-tutorial/blob/main/survey_usecase/kpa_parameters.pdf
-        :param description: optional, add a description to a job so it will be easy to detect it in the user-report.
+        :param description: optional, add a description to a job so it will be easy to detect it in the user-report. if stances_to_run=="each_stance",
+        the stance of each job will be added to the description
         :param run_on_stance: Optional, default to None. If None - run on all the data without regarding the stance. If "pro", run on positive sentences only,
         if "con", run on con sentences (negative and suggestions). If "each_stance", starts two kpa jobs, one for each stance, and
         returns the merged result.
@@ -208,10 +209,10 @@ class KpAnalysisClient():
             keypoint_matching = future.get_result(high_verbosity=True)
         else:
             future_pro = self.run_kpa_job_async(domain, run_params=run_params, stance="pro", comments_ids=comments_ids,
-                                                description=description)
+                                                description=(description + " (pro)") if description else None)
 
             future_con = self.run_kpa_job_async(domain, run_params=run_params, stance="con", comments_ids=comments_ids,
-                                                description=description)
+                                                description=(description + " (con)") if description else None)
 
             logging.info('waiting for the key point analysis jobs to finish')
             results_pro = future_pro.get_result(high_verbosity=True)
@@ -481,7 +482,7 @@ class KpAnalysisTaskFuture:
         '''
         self.client = client
         self.job_id = job_id
-        self.polling_timeout_secs = 60
+        self.polling_timeout_secs = 30
 
     def get_job_id(self) -> str:
         '''
@@ -498,7 +499,7 @@ class KpAnalysisTaskFuture:
         :param top_k_sentences_per_kp: use this parameter to truncate the result json to have only the top K matched sentences per key point.
         :param dont_wait: when True, tries to get the result once and returns it if it's available, otherwise returns None.
         :param wait_secs: limit the waiting time (in seconds).
-        :param polling_timeout_secs: sets the time to wait before polling again (in seconds). The default is 60 seconds.
+        :param polling_timeout_secs: sets the time to wait before polling again (in seconds). The default is 30 seconds.
         :param high_verbosity: set to False to reduce the number of messages printed to the logger.
         :return: the KpaResult object or throws an exception if an error occurs or if the job was canceled.
         '''
