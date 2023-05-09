@@ -118,3 +118,7 @@ def get_default_request_header(apikey):
             'content-type': 'application/json',
             'charset': 'UTF-8',
             'apikey': apikey}
+
+
+def filter_dict_by_keys(d, keys):
+    return {k:d[k] for k in keys}
