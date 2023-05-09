@@ -2,10 +2,11 @@ import json
 import logging
 import pandas as pd
 import numpy as np
-from debater_python_api.api.clients.key_point_analysis.utils import create_dict_to_list, read_dicts_from_df
+from debater_python_api.api.clients.key_point_analysis.utils import create_dict_to_list, read_dicts_from_df, \
+    get_unique_sent_id
 
 
-def create_graph_data(full_results_df, min_n_similar_matches=5, n_matches_samples=20):
+def create_graph_data(full_results_df, n_sentences, min_n_similar_matches=5, n_matches_samples=20):
     '''
     translates the result file (full result, not the summary) into a json that is loadable in the kpa-key-points-graph-ui
     :param kpa_result: a KpaResult instance
@@ -53,7 +54,6 @@ def create_graph_data(full_results_df, min_n_similar_matches=5, n_matches_sample
                 }
 
     dicts, _ = read_dicts_from_df(full_results_df)
-    n_sentences = len(set([d['sentence_text'] for d in dicts]))
     kp_to_dicts = create_dict_to_list([(d['kp'], d) for d in dicts])
     all_kps = set(kp_to_dicts.keys())
     all_kps = all_kps - {'none'}
@@ -255,3 +255,66 @@ def get_hierarchical_graph_from_tree_and_subset_results(graph_data_hierarchical,
         e["data"]["score"] = -1
 
     return new_nodes + edges
+
+def get_unique_matches_subtree(node_id, id_to_data, id_to_kids, id_to_n_unique_matches_subtree, kp_to_dicts, by_sentence = True):
+    kp = id_to_data[node_id]['kp']
+    if by_sentence:
+        kp_unique_sentences = set([get_unique_sent_id(d) for d in kp_to_dicts[kp]])
+    else: # by comments
+        kp_unique_sentences = set([d['comment_id'] for d in kp_to_dicts[kp]])
+    if node_id in id_to_kids:
+        for kid in id_to_kids[node_id]:
+            kp_unique_sentences = kp_unique_sentences.union(get_unique_matches_subtree(kid, id_to_data, id_to_kids, id_to_n_unique_matches_subtree, kp_to_dicts, by_sentence))
+    id_to_n_unique_matches_subtree[node_id] = len(kp_unique_sentences)
+    return kp_unique_sentences
+
+
+def get_hierarchical_kps_data(full_result_df, graph_data, min_n_matches = 5, filter_min_relation_strength = 0.4):
+
+    graph_data = filter_graph_by_relation_strength(graph_data, filter_min_relation_strength)
+
+    nodes = [d for d in graph_data if d['type'] == 'node']
+    edges = [d for d in graph_data if d['type'] == 'edge']
+
+    if min_n_matches is not None:
+        nodes = [n for n in nodes if int(n['data']['n_matches'])>=min_n_matches]
+
+    nodes_ids = [n['data']['id'] for n in nodes]
+    edges = [e for e in edges if (e['data']['target'] in nodes_ids and e['data']['source'] in nodes_ids)]
+
+    id_to_kids = create_dict_to_list([(e['data']['target'], e['data']['source']) for e in edges])
+    id_to_parent = create_dict_to_list([(e['data']['source'], e['data']['target']) for e in edges])
+    id_to_parent = {k:id_to_parent[k][0] for k in id_to_parent}
+
+    kp_id_to_data = {d['data']['id']: {"kp":d['data']["kp"], "n_matching_sentences":d['data']["n_matches"]} for d in nodes}
+
+    all_kids = set()
+    for id, kids in id_to_kids.items():
+        all_kids = all_kids.union(kids)
+
+    root_ids = set(nodes_ids).difference(all_kids)
+
+    dicts, _ = read_dicts_from_df(full_result_df)
+    kp_to_dicts = create_dict_to_list([(d['kp'], d) for d in dicts])
+
+    kp_to_stance = {}
+    kp_to_n_matching_comments = {}
+    for kp, kp_dicts in kp_to_dicts.items():
+        kp_to_stance[kp] = kp_dicts[0].get('kp_stance', "") if len(kp_dicts) > 0 else ""
+        kp_to_n_matching_comments[kp] = len(set([d['comment_id'] for d in kp_dicts]))
+
+    id_to_n_matches_subtree_sent = {}
+    id_to_n_matches_subtree_comments = {}
+    for root in root_ids:
+        get_unique_matches_subtree(root, kp_id_to_data, id_to_kids, id_to_n_matches_subtree_sent, kp_to_dicts, by_sentence=True)
+        get_unique_matches_subtree(root, kp_id_to_data, id_to_kids, id_to_n_matches_subtree_comments, kp_to_dicts,
+                                   by_sentence=False)
+
+    for id in kp_id_to_data:
+        kp_id_to_data[id].update({'parent':id_to_parent.get(id),
+                                  'n_matching_sents_in_subtree':id_to_n_matches_subtree_sent[id],
+                                  'n_matching_comments_in_subtree':id_to_n_matches_subtree_comments[id],
+                                  "kids":id_to_kids.get(id, []),
+                                  'kp_stance':kp_to_stance[kp_id_to_data[id]['kp']],
+                                  'n_matching_comments':kp_to_n_matching_comments[kp_id_to_data[id]['kp']]})
+    return kp_id_to_data

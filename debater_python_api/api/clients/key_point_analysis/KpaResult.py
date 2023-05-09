@@ -10,10 +10,10 @@ from keypoint_analysis.km_utils import init_logger
 
 from KpaExceptions import KpaIllegalInputException
 from debater_python_api.api.clients.key_point_analysis.utils import read_dicts_from_df, create_dict_to_list, \
-    write_df_to_file, get_unique_sent_id, get_cid_and_sid_from_sent_identifier
+    write_df_to_file, get_unique_sent_id, get_cid_and_sid_from_sent_identifier, filter_dict_by_keys
 from docx_generator import save_hierarchical_graph_data_to_docx
 from graph_generator import create_graph_data, graph_data_to_hierarchical_graph_data, filter_graph_by_relation_strength, \
-    get_hierarchical_graph_from_tree_and_subset_results
+    get_hierarchical_graph_from_tree_and_subset_results, get_hierarchical_kps_data
 import os
 CURR_RESULTS_VERSION = "2.0"
 
@@ -22,14 +22,32 @@ class KpaResult:
     """
     Class to hold and process the results of a KPA job.
     """
-    def __init__(self, result_json):
+    def __init__(self, result_json, filter_min_relations=0.4):
         """
         :param result_json: the result json returned from the key point client using get_results.
         """
         self.result_json = result_json
         self.result_df = self.create_result_df()
-        self.summary_df = self.result_df_to_summary_df()
         self.version = CURR_RESULTS_VERSION
+        self.stances = set(result_json["job_metadata"]["per_stance"].keys())
+        self.filter_min_relations_for_text = filter_min_relations
+        self.kp_id_to_hierarchical_data = self.get_kp_id_to_hierarchical_data()
+        self.summary_df = self.result_df_to_summary_df()
+
+    @staticmethod
+    def get_stance_from_server_stances(server_stances):
+
+        if not server_stances or len(server_stances) == 0:
+            return ""
+        if server_stances == ["pos"]:
+            return "pro"
+        if set(server_stances) == set(["neg", "sug"]):
+            return "con"
+
+        raise KpaIllegalInputException(f'Unsupported stances {server_stances}')
+
+    def get_matadata(self):
+        return self.result_json["job_metadata"]
 
     def save(self, json_file):
         """
@@ -227,6 +245,8 @@ class KpaResult:
     @staticmethod
     # If result_json is of the old version, convert to version 2.0
     def convert_to_v2(result_json):
+        metadata = result_json["job_metadata"]
+        kps_stance = KpaResult.get_stance_from_server_stances(metadata["stances"])
         sentences_data = {}
         new_matchings = []
         for keypoint_matching in result_json['keypoint_matchings']:
@@ -257,108 +277,83 @@ class KpaResult:
                     sentences_data[comment_id]["sentences"][sent_id_in_comment] = sent_data.copy()
 
             new_matchings.append(new_kp_matching)
-        return {"keypoint_matchings":new_matchings, "sentences_data":sentences_data, "version":CURR_RESULTS_VERSION}
 
-    def export_to_dfs(self, output_dir=None, result_name=None):
-        """
-        Return the full results and the summary results as dataframes.
-        If output_dir and results_name are supplied, writes to files:
-            * <ouput_dir>/<result_name>.csv : full results.
-            * <ouput_dir>/<result_name>_kps_summary.csv : summary results.
-        :param output_dir: optional, path to output directory
-        :param result_name: optional, name of the results to appear in the output files.
-        :return: the full results and the summary results as dataframes
-        """
-        if output_dir is not None and result_name:
-            result_file = os.path.join(output_dir, result_name+".csv")
-            write_df_to_file(self.result_df, result_file)
+        if kps_stance:
+            per_stance_dict = {kps_stance: filter_dict_by_keys(metadata, ['description', 'run_params', 'job_id',
+                                                                          'n_sentences_stance', 'n_comments_stance'])}
+        else:
+            per_stance_dict = {}
+        metadata_v2 = {"general": filter_dict_by_keys(metadata, ['domain', 'user_id', 'n_sentences',
+                                                                 'n_sentences_unfiltered', 'n_comments',
+                                                                 'n_comments_unfiltered']),
+                       "per_stance": per_stance_dict}
+        return {"keypoint_matchings": new_matchings, "sentences_data": sentences_data, "version": CURR_RESULTS_VERSION,
+                "job_metadata": metadata_v2}
 
-            summary_file = result_file.replace(".csv", "_kps_summary.csv")
-            write_df_to_file(self.summary_df, summary_file)
-        return self.result_df, self.summary_df
-
-    @staticmethod
-    def save_graph_data(graph_data, out_file):
-        """
-        saves graph data to json file
-        :param graph_data: the json object storing the graph data
-        :param out_file: json output file to save data
-        """
-        logging.info(f'saving graph in file: {out_file}')
-        with open(out_file, 'w') as f:
-            json.dump(graph_data, f)
-
-    def export_to_graph_data(self, output_dir=None, result_name=None,
-                             min_n_similar_matches_in_graph=5,
-                             n_top_matches_in_graph=20,
-                             ):
-        """
-        Creates hierarchical and non-hierarchical graph data. If output_dir and result_name are not None, saves the graphs.
-        :param output_dir: optional, path to output directory
-        :param result_name: optional, name of the results to appear in the output files.
-        :param min_n_similar_matches_in_graph: optional, the minimal number of matches that match both key points when calculating the relation between them.
-        :param n_top_matches_in_graph : optional, number of top matches to add to the graph_data file.
-        :return: json objects graph_data and hierarchical_graph_data.
-        If output_dir and result_name are not None, this method creates 2 files:
-            * <ouput_dir>/<result_name>_graph_data.json: a graph_data file that can be loaded to the key points graph-demo-site:
-            https://keypoint-matching-ui.ris2-debater-event.us-east.containers.appdomain.cloud/
-            It presents the relations between the key points as a graph of key points.
-            * <ouput_dir>/<result_name>_hierarchical_graph_data.json: another graph_data file that can be loaded to the graph-demo-site.
-        """
-        graph_data_full = create_graph_data(self.result_df,
-                                            min_n_similar_matches=min_n_similar_matches_in_graph,
-                                            n_matches_samples=n_top_matches_in_graph)
-
-        graph_data_hierarchical = graph_data_to_hierarchical_graph_data(graph_data=graph_data_full)
-
-        if output_dir is not None and result_name:
-            graph_filename = os.path.join(output_dir, result_name+'_graph_data.json')
-            KpaResult.save_graph_data(graph_data_full, graph_filename)
-            KpaResult.save_graph_data(graph_data_hierarchical,
-                            graph_filename.replace('_graph_data.json', '_hierarchical_graph_data.json'))
-
-        return graph_data_full, graph_data_hierarchical
-
-    def generate_docx_from_hierarchical_graph_data(self, graph_data_hierarchical, output_dir, result_name,
-                                                   filter_min_relations_for_text=0.4,
-                                                   n_matches_in_docx=50,
-                                                   include_match_score_in_docx=False,
-                                                   min_n_matches_in_docx=5):
-        graph_data_hierarchical = filter_graph_by_relation_strength(graph_data_hierarchical,
-                                                                    filter_min_relations_for_text)
-        docx_file = os.path.join(output_dir, f'{result_name}_hierarchical.docx')
-        save_hierarchical_graph_data_to_docx(full_result_df=self.result_df, graph_data=graph_data_hierarchical,
-                                             result_filename=docx_file, n_matches=n_matches_in_docx,
-                                             include_match_score=include_match_score_in_docx,
-                                             min_n_matches=min_n_matches_in_docx)
-
-    def export_to_docx_report(self, output_dir, result_name,
-                              min_n_similar_matches_in_graph = 5,
-                              filter_min_relations_for_text=0.4,
-                              n_matches_in_docx=50,
-                              include_match_score_in_docx=False,
-                              min_n_matches_in_docx=5
-                              ):
+    def generate_docx_report(self, output_dir, result_name,
+                             n_matches_in_docx=50,
+                             include_match_score_in_docx=False,
+                             min_n_matches_in_docx=5,
+                             kp_id_to_hierarchical_data=None):
         """
         creates <output_dir>/<result_name>_hierarchical.docx: This Microsoft Word document shows the key point hierarchy and matching sentences
-         as a user-friendly report.
+        as a user-friendly report.
         :param output_dir: path to output directory
         :param result_name: name of the results to appear in the output files.
-        :param min_n_similar_matches_in_graph: the minimal number of matches that match both key points when calculating the relation between them.
-        :param filter_min_relations_for_text: the minimal key points relation threshold, when creating the textual summaries.
         :param n_matches_in_docx: number of top matches to write in the textual summary (docx file). Pass None for all matches.
         :param include_match_score_in_docx: when set to true, the match score between the sentence and the key point is added.
         :param min_n_matches_in_docx: remove key points with less than min_n_matches_in_docx matching sentences.
+        :param kp_id_to_hierarchical_data: optional, should be set to None.
         """
-        _, graph_data_hierarchical = self.export_to_graph_data(min_n_similar_matches_in_graph=min_n_similar_matches_in_graph)
-        self.generate_docx_from_hierarchical_graph_data(graph_data_hierarchical, output_dir, result_name,
-                                                        filter_min_relations_for_text=filter_min_relations_for_text,
-                                                        n_matches_in_docx=n_matches_in_docx,
-                                                        include_match_score_in_docx=include_match_score_in_docx,
-                                                        min_n_matches_in_docx=min_n_matches_in_docx)
+        if not kp_id_to_hierarchical_data:
+            kp_id_to_hierarchical_data = self.kp_id_to_hierarchical_data
+        docx_file = os.path.join(output_dir, f'{result_name}_hierarchical.docx')
+        meta_data = self.result_json["job_metadata"]
+        save_hierarchical_graph_data_to_docx(full_result_df=self.result_df, kp_id_to_data=kp_id_to_hierarchical_data,
+                                             result_filename=docx_file, meta_data=meta_data, n_matches=n_matches_in_docx,
+                                             include_match_score=include_match_score_in_docx,
+                                             min_n_matches=min_n_matches_in_docx)
 
-    def export_to_all_outputs(self, output_dir, result_name, min_n_similar_matches_in_graph=5, n_top_matches_in_graph=20,
-                              filter_min_relations_for_text=0.4,
+    def generate_docx_report_using_given_tree(self, full_results,
+                                              output_dir, result_name, n_top_matches_in_graph=20,
+                                              n_matches_in_docx=50, include_match_score_in_docx=False,
+                                              min_n_matches_in_docx=5):
+        '''
+        Create hierarchical result for kpa_result, using a precalculated hierarchical results.
+        This is useful when we first create results using the whole data, and then want to calculate the
+        hierarchical result of its subset while considering the already existing key points and hierarchy generated over the whole data.
+        For example, when we have a large survey, we can first run over the entire data to create a hierarchical
+        representation of the full results. Then when we want to evaluate a subset of the survey we can run over a subset of
+        the survey using the same key points precomputed in the full survey. Then we create its hierarchical
+        representation using the hierarchy of the full survey.
+        :param full_results: KpaResult over the full data.
+        :param output_dir: path to output directory
+        :param result_name: name of the results to appear in the output files.
+        :param n_top_matches_in_graph : optional, number of top matches to add to the graph_data file.
+        :param n_matches_in_docx: optional, number of top matches to write in the textual summary (docx file). Pass None for all matches.
+        :param include_match_score_in_docx: optional, when set to true, the match score between the sentence and the key point is added.
+        :param min_n_matches_in_docx: optional, remove key points with less than min_n_matches_in_docx matching sentences.
+        '''
+        graph_full_data = create_graph_data(full_results.result_df, full_results.get_number_of_unique_sentences())
+        hierarchical_graph_full_data = graph_data_to_hierarchical_graph_data(graph_data=graph_full_data)
+
+        new_hierarchical_graph_data = get_hierarchical_graph_from_tree_and_subset_results(
+            hierarchical_graph_full_data,
+            self.result_df, self.filter_min_relations_for_text, n_top_matches_in_graph)
+
+        new_kp_id_to_hierarchical_data = get_hierarchical_kps_data(self.result_df, new_hierarchical_graph_data, self.filter_min_relations_for_text)
+        self.generate_docx_report(output_dir, result_name,
+                            n_matches_in_docx=n_matches_in_docx,
+                            include_match_score_in_docx=include_match_score_in_docx,
+                            min_n_matches_in_docx=min_n_matches_in_docx,
+                            kp_id_to_hierarchical_data = new_kp_id_to_hierarchical_data)
+
+    def get_kp_id_to_hierarchical_data(self):
+        graph_data = create_graph_data(self.result_df, n_sentences=self.get_number_of_unique_sentences())
+        hierarchical_graph_data = graph_data_to_hierarchical_graph_data(graph_data=graph_data)
+        return get_hierarchical_kps_data(self.result_df, hierarchical_graph_data, self.filter_min_relations_for_text)
+
+    def export_to_all_outputs(self, output_dir, result_name,
                               n_matches_in_docx=50,
                               include_match_score_in_docx=False,
                               min_n_matches_in_docx=5
@@ -367,75 +362,26 @@ class KpaResult:
         Generates all the kpa available output types.
         :param output_dir: path to output directory
         :param result_name: name of the results to appear in the output files.
-        :param min_n_similar_matches_in_graph: the minimal number of matches that match both key points when calculating the relation between them.
-        :param n_top_matches_in_graph : optional, number of top matches to add to the graph_data file.
-        :param filter_min_relations_for_text: optional, the minimal key points relation threshold, when creating the textual summaries.
         :param n_matches_in_docx: optional, number of top matches to write in the textual summary (docx file). Pass None for all matches.
         :param include_match_score_in_docx: optional, when set to true, the match score between the sentence and the key point is added.
         :param min_n_matches_in_docx: optional, remove key points with less than min_n_matches_in_docx matching sentences.
         Creates 5 outout files:
              * <ouput_dir>/<result_name>.csv : full results as csv .
              * <ouput_dir>/<result_name>_kps_summary.csv : summary results as csv.
-             * <ouput_dir>/<result_name>_graph_data.json: a graph_data file that can be loaded to the key points graph-demo-site:
-            https://keypoint-matching-ui.ris2-debater-event.us-east.containers.appdomain.cloud/
-            It presents the relations between the key points as a graph of key points.
-            * <ouput_dir>/<result_name>_hierarchical_graph_data.json: another graph_data file that can be loaded to the graph-demo-site.
-            *  <result_file>_hierarchical.docx: This Microsoft Word document shows the key point hierarchy and matching sentences
+             *  <result_file>_hierarchical.docx: This Microsoft Word document shows the key point hierarchy and matching sentences
             as a user-friendly report.
         """
-        self.export_to_dfs(output_dir=output_dir, result_name=result_name)
-        graph_data_full, graph_data_hierarchical = self.export_to_graph_data(output_dir=output_dir, result_name=result_name,
-                             min_n_similar_matches_in_graph=min_n_similar_matches_in_graph,
-                             n_top_matches_in_graph = n_top_matches_in_graph)
-        self.generate_docx_from_hierarchical_graph_data(graph_data_hierarchical, output_dir, result_name,
-                                                        filter_min_relations_for_text=filter_min_relations_for_text,
-                                                        n_matches_in_docx=n_matches_in_docx,
-                                                        include_match_score_in_docx=include_match_score_in_docx,
-                                                        min_n_matches_in_docx=min_n_matches_in_docx)
 
+        result_file = os.path.join(output_dir, result_name+".csv")
+        write_df_to_file(self.result_df, result_file)
 
-    def generate_graphs_and_textual_summary_for_given_tree(self, hierarchical_data_file,
-                                                           output_dir, result_name,
-                                                           n_top_matches_in_graph=20,
-                                                           filter_min_relations_for_text=0.4,
-                                                           n_matches_in_docx=50,
-                                                           include_match_score_in_docx=False,
-                                                           min_n_matches_in_docx=5):
-        '''
-        Create hierarchical result for kpa_result, using a precalculated hierarchical results hierarchical_data_file.
-        This is useful when we first create hierarchical_data_file using the whole data, and then want to calculate the
-        hierarchical result of its subset while considering the already existing hierarchy generated over the whole data.
-        For example, when we have a large survey, we can first run over the entire data using the method
-        export_to_graph_data to create a hierarchical representation of the results. Then when we
-        want to evaluate a subset of the survey we can run over a subset of the survey and when we create its
-        hierarchical representation we will use the hierarchical_data_file of the full survey.
-        :param hierarchical_data_file: hierarchical data file (json) of the precomputed full survey.
-        :param output_dir: path to output directory
-        :param result_name: name of the results to appear in the output files.
-        :param n_top_matches_in_graph : optional, number of top matches to add to the graph_data file.
-        :param filter_min_relations_for_text: optional, the minimal key points relation threshold, when creating the textual summaries.
-        :param n_matches_in_docx: optional, number of top matches to write in the textual summary (docx file). Pass None for all matches.
-        :param include_match_score_in_docx: optional, when set to true, the match score between the sentence and the key point is added.
-        :param min_n_matches_in_docx: optional, remove key points with less than min_n_matches_in_docx matching sentences.
-        '''
-        with open(hierarchical_data_file, "r") as f:
-            graph_data_hierarchical = json.load(f)
+        summary_file = result_file.replace(".csv", "_kps_summary.csv")
+        write_df_to_file(self.summary_df, summary_file)
 
-        new_hierarchical_graph_data = get_hierarchical_graph_from_tree_and_subset_results(
-            graph_data_hierarchical,
-            self.result_df, filter_min_relations_for_text, n_top_matches_in_graph)
-
-        if not new_hierarchical_graph_data:
-            return
-        new_hierarchical_graph_file = os.path.join(output_dir, result_name + "_hierarchical_graph_data.json")
-        KpaResult.save_graph_data(new_hierarchical_graph_data, new_hierarchical_graph_file)
-
-        self.generate_docx_from_hierarchical_graph_data(new_hierarchical_graph_file, output_dir, result_name,
-                                                        filter_min_relations_for_text=0,
-                                                        n_matches_in_docx=n_matches_in_docx,
-                                                        include_match_score_in_docx=include_match_score_in_docx,
-                                                        min_n_matches_in_docx=min_n_matches_in_docx)
-
+        self.generate_docx_report(output_dir, result_name,
+                                  n_matches_in_docx=n_matches_in_docx,
+                                  include_match_score_in_docx=include_match_score_in_docx,
+                                  min_n_matches_in_docx=min_n_matches_in_docx)
 
 
     def print_result(self, n_sentences_per_kp, title):
