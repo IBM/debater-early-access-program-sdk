@@ -384,11 +384,12 @@ class KpaResult:
                                   min_n_matches_in_docx=min_n_matches_in_docx)
 
 
-    def print_result(self, n_sentences_per_kp, title):
+    def print_result(self, n_sentences_per_kp, title, n_top_kps = None):
         '''
         Prints the key point analysis result to console.
         :param n_sentences_per_kp: number of top matched sentences to display for each key point
         :param title: title to print for the analysis
+        :param n_top_kps: optional, maximal number of kps to display.
         '''
         def split_sentence_to_lines(sentence, max_len=90):
             if len(sentence) <= max_len:
@@ -416,12 +417,13 @@ class KpaResult:
                 lines.extend(split_sentence_to_lines(sentence))
             return [('\t' * n_tabs) + line for line in lines]
 
-        def print_kp(kp, stance, keypoint_matching, sentences_data, n_sentences_per_kp):
+        def print_kp(kp, stance, keypoint_matching, sentences_data, n_sentences_per_kp): #TODO!!! N_MATCHES INCLUDES KP ITSELF, PRINTS 1 LESS...
             print('%d - %s%s' % (len(keypoint_matching), kp, '' if stance is None else ' - ' + stance))
             sentences = []
             for match in keypoint_matching:
-                cid, sent_id_in_comment = get_cid_and_sid_from_sent_identifier(match["sent_identifier"])
-                sent = sentences_data[cid]['sentences'][sent_id_in_comment]["sentence_text"]
+                comment_id = str(match["comment_id"])
+                sent_id_in_comment = str(match["sentence_id"])
+                sent = sentences_data[comment_id]['sentences'][sent_id_in_comment]["sentence_text"]
                 sentences.append(sent)
             sentences = sentences[1:(n_sentences_per_kp + 1)]  # first sentence is the kp itself
             lines = split_sentences_to_lines(sentences, 0)
@@ -436,7 +438,8 @@ class KpaResult:
 
         print(title + ' coverage: %.2f' % (float(n_matched_sentences) / float(n_total_sentences) * 100.0))
         print(title + ' key points:')
-        for keypoint_matching in keypoint_matchings:
+        n_top_kps = n_top_kps if n_top_kps else len(keypoint_matchings)
+        for keypoint_matching in keypoint_matchings[:n_top_kps]:
             kp = keypoint_matching['keypoint']
             stance = None if 'stance' not in keypoint_matching else keypoint_matching['stance']
             if kp == 'none':
