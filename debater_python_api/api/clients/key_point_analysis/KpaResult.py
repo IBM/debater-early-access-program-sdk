@@ -10,9 +10,9 @@ from keypoint_analysis.km_utils import init_logger
 
 from KpaExceptions import KpaIllegalInputException
 from debater_python_api.api.clients.key_point_analysis.utils import read_dicts_from_df, create_dict_to_list, \
-    write_df_to_file, get_unique_sent_id, get_cid_and_sid_from_sent_identifier, filter_dict_by_keys
+    write_df_to_file, get_unique_sent_id, filter_dict_by_keys
 from docx_generator import save_hierarchical_graph_data_to_docx
-from graph_generator import create_graph_data, graph_data_to_hierarchical_graph_data, filter_graph_by_relation_strength, \
+from graph_generator import create_graph_data, graph_data_to_hierarchical_graph_data, \
     get_hierarchical_graph_from_tree_and_subset_results, get_hierarchical_kps_data
 import os
 CURR_RESULTS_VERSION = "2.0"
@@ -70,7 +70,6 @@ class KpaResult:
             json_res = json.load(f)
             return KpaResult.create_from_result_json(json_res)
 
-
     def create_result_df(self):
         sentences_data = self.result_json["sentences_data"]
         matchings_rows = []
@@ -79,6 +78,8 @@ class KpaResult:
         stance_keys = []
         for keypoint_matching in self.result_json['keypoint_matchings']:
             kp = keypoint_matching['keypoint']
+            if kp == "none":
+                continue
             kp_quality = keypoint_matching.get('kp_quality', None)
             kp_stance = keypoint_matching.get('stance', None)
             if kp_stance is not None:
@@ -86,8 +87,8 @@ class KpaResult:
 
             for match in keypoint_matching['matching']:
                 score = match["score"]
-                sent_identifier = match["sent_identifier"]
-                comment_id, sent_id_in_comment = get_cid_and_sid_from_sent_identifier(sent_identifier)
+                comment_id = str(match["comment_id"])
+                sent_id_in_comment = str(match["sentence_id"])
                 comment_data = sentences_data[comment_id]
                 sent_data = comment_data["sentences"][sent_id_in_comment]
 
@@ -117,102 +118,63 @@ class KpaResult:
         return pd.DataFrame(matchings_rows, columns=matchings_cols)
 
     def result_df_to_summary_df(self):
+
+        kp_to_id = {self.kp_id_to_hierarchical_data[id]["kp"]:id for id in self.kp_id_to_hierarchical_data }
         dicts, _ = read_dicts_from_df(self.result_df)
-        if len(dicts) == 0:
-            logging.info("No key points in results")
-            return None
 
         kp_to_dicts = create_dict_to_list([(d['kp'], d) for d in dicts])
 
-        total_sentences = self.get_number_of_unique_sentences()
+        general_metadata = self.result_json["job_metadata"]["general"]
+        n_total_sentences = general_metadata["n_sentences"]
+        all_mapped_sentences = set([get_unique_sent_id(d) for d in dicts if d['kp'] != 'none'])
+        n_unmapped_sentences = n_total_sentences - len(all_mapped_sentences)
 
-        all_comment_ids = set([d["comment_id"] for d in dicts])
-        total_comments = len(all_comment_ids)
+        n_total_comments = general_metadata["n_comments"]
         all_mapped_comment_ids = set([d["comment_id"] for d in dicts if d['kp'] != 'none'])
-
-        total_unmapped_comments = total_comments - len(all_mapped_comment_ids)
+        n_unmapped_comments = n_total_comments - len(all_mapped_comment_ids)
 
         summary_rows = []
-        kps_have_stance = False
+        summary_cols = ["kp", '#comments', 'comments_coverage', "#sentences", 'sentences_coverage', "parent", "n_comments_subtree","stance"]
+
+        none_row = ["none", n_unmapped_comments, n_unmapped_comments/n_total_comments, n_unmapped_sentences, n_unmapped_sentences/n_total_sentences,
+                    "-","-", "-"]
+        summary_rows.append(none_row)
+
         for kp, kp_dicts in kp_to_dicts.items():
-            n_sentences = len(kp_dicts)
-            sentence_coverage = n_sentences / total_sentences if total_sentences > 0 else 0.0
             if kp == "none":
-                n_comments = total_unmapped_comments
-            else:
-                n_comments = len(set([d["comment_id"] for d in kp_dicts]))
-            comments_coverage = n_comments / total_comments if total_comments > 0 else 0.0
-            summary_row = [kp, n_sentences, sentence_coverage, n_comments, comments_coverage]
+                continue
 
-            kp_stance = None
-            if len(kp_dicts) > 0:
-                if 'kp_stance' in kp_dicts[0]:
-                    kps_have_stance = True
-                    kp_stance = kp_dicts[0]['kp_stance']
+            n_sentences = len(kp_dicts)
+            sentence_coverage = n_sentences / n_total_sentences if n_total_sentences > 0 else 0.0
+            n_comments = len(set([d["comment_id"] for d in kp_dicts]))
+            comments_coverage = n_comments / n_total_comments if n_total_comments > 0 else 0.0
 
-            if kps_have_stance:
-                summary_row.append(kp_stance if kp_stance else "")
+            kp_to_data = self.kp_id_to_hierarchical_data[kp_to_id[kp]]
+            parent = kp_to_data['parent']
+            n_comments_in_subtree = kp_to_data['n_matching_comments_in_subtree']
+            kp_stance = kp_to_data.get('kp_stance', "")
 
-            kp_scores = [0, 0, 0]
-            for d in kp_dicts:
-                if d["sentence_text"] == kp:
-                    kp_scores = [d["num_tokens"], d["argument_quality"], d.get("kp_quality", 0)]
-
-            summary_row.extend(kp_scores)
+            summary_row = [kp, n_comments, comments_coverage, n_sentences, sentence_coverage,
+                           parent, n_comments_in_subtree, kp_stance]
             summary_rows.append(summary_row)
 
         summary_rows = sorted(summary_rows, key=lambda x: x[1], reverse=True)
-        summary_cols = ["kp", "#sentences", 'sentences_coverage', '#comments', 'comments_coverage']
-        if kps_have_stance:
-            summary_cols.append('stance')
-        summary_cols.extend(["num_tokens", "argument_quality", "kp_quality"])
+        for stance in self.stances:
+            stance_data = self.result_json["job_metadata"]["per_stance"][stance]
+            stance_n_comments = stance_data["n_comments_stance"]
+            stance_comment_coverage = stance_n_comments/n_total_comments
+            stance_n_sentences = stance_data["n_sentences_stance"]
+            stance_sentence_coverage = stance_n_sentences / n_total_sentences
+            stance_row = [stance, stance_n_comments, stance_comment_coverage, stance_n_sentences, stance_sentence_coverage,
+                          "","",stance]
+            summary_rows.append(stance_row)
+        total_row = ["total",n_total_comments, 1, n_total_sentences, 1, "","",""]
+        summary_rows.append(total_row)
+
         return pd.DataFrame(summary_rows, columns=summary_cols)
 
     @staticmethod
-    def result_df_to_result_json(result_df, new_version = True):
-        kp_to_matches = defaultdict(list)
-        dicts, _ = read_dicts_from_df(result_df)
-        for i, match in enumerate(dicts):
-            kp = str(match['kp'])
-            kp_stance = None
-            del match['kp']
-            if 'kp_stance' in match:
-                kp_stance = match['kp_stance']
-                del match['kp_stance']
-            for k in match:
-                match[k] = str(match[k])
-            match['score'] = match['match_score']
-            del match['match_score']
-
-            if 'stance' in match:
-                if isinstance(match['stance'], str):
-                    match['stance'] = ast.literal_eval(match['stance'])
-            else:
-                stance = {}
-                if 'pos_score' in match:
-                    stance['pos'] = float(match['pos_score'])
-                if 'neg_score' in match:
-                    stance['neg'] = float(match['neg_score'])
-                if 'sug_score' in match:
-                    stance['sug'] = float(match['sug_score'])
-                if 'neut_score' in match:
-                    stance['neut'] = float(match['neut_score'])
-                if len(stance) > 0:
-                    match['stance'] = stance
-
-            kp_to_matches[(kp, kp_stance)].append(match)
-        result_json = {'keypoint_matchings': []}
-        for (kp, stance), matchings in kp_to_matches.items():
-            km = {'keypoint': kp, 'matching': matchings}
-            if stance is not None:
-                km['stance'] = stance
-            result_json['keypoint_matchings'].append(km)
-        if new_version:
-            result_json = KpaResult.convert_to_v2(result_json)
-        return result_json
-
-    @staticmethod
-    def create_from_result_json(result_json):
+    def create_from_result_json(result_json, filter_min_relations_for_text=0.4):
         """
         Create KpaResults from results_json
         :param result_json: the json object obtained from the client via "get_results"
@@ -222,51 +184,49 @@ class KpaResult:
             raise KpaIllegalInputException("Faulty results json provided: does not contain 'keypoint_matchings'. returning empty results")
         else:
             try:
-                if "version" in result_json:
-                    return KpaResult(result_json)
-                else:
-                    result_json_v2 = KpaResult.convert_to_v2(result_json)
-                    return KpaResult(result_json_v2)
+                version = result_json.get("version", "1.0")
+                if version != CURR_RESULTS_VERSION:
+                    result_json = KpaResult.convert_to_new_version(result_json, version, CURR_RESULTS_VERSION)
+                return KpaResult(result_json, filter_min_relations_for_text)
             except Exception as e:
                 logging.error("Could not create KpaResults from json.")
                 raise e
 
     @staticmethod
-    def create_from_result_csv(result_csv):
-        """
-        Create KpaResults from results csv. Remains for backwards compatibility and will be removed in next versions.
-        :param result_csv: csv holding the full results.
-        :return: KpaResult object
-        """
-        result_df = pd.read_csv(result_csv)
-        result_json = KpaResult.result_df_to_result_json(result_df)
-        return KpaResult(result_json)
+    def convert_to_new_version(result_json, old_version, new_version):
+        if old_version == "1.0" and new_version == "2.0":
+            return KpaResult.convert_v1_to_v2(result_json)
+
+        #can create more conversion methods for future json_result versions...
+        raise KpaIllegalInputException(f"Unsupported results version old: {old_version}, new: {new_version}. "
+                                       f"Supported: old = 1.0, new = 2.0")
 
     @staticmethod
     # If result_json is of the old version, convert to version 2.0
-    def convert_to_v2(result_json):
+    # 1.0 - received from the server, must have only one stance (merging pro_con is only on v2)
+    def convert_v1_to_v2(result_json):
         metadata = result_json["job_metadata"]
         kps_stance = KpaResult.get_stance_from_server_stances(metadata["stances"])
         sentences_data = {}
         new_matchings = []
         for keypoint_matching in result_json['keypoint_matchings']:
             kp = keypoint_matching['keypoint']
-            kp_stance = keypoint_matching.get('stance', None)
+            #kp_stance = keypoint_matching.get('stance', None)
             new_kp_matching = {'keypoint': kp, "matching": []}
-            if kp_stance is not None:
-                new_kp_matching["stance"] = kp_stance
+            if kps_stance:
+                new_kp_matching["stance"] = kps_stance
 
             for match in keypoint_matching['matching']:
                 if "kp_quality" not in new_kp_matching:
                     kpq = match.get("kp_quality", 0)
                     new_kp_matching["kp_quality"] = kpq
 
-                sent_identifier = get_unique_sent_id(match)
+                #sent_identifier = get_unique_sent_id(match)
                 comment_id = match["comment_id"]
-                sent_id_in_comment = int(match["sentence_id"])
+                sent_id_in_comment = str(match["sentence_id"])
 
-                new_kp_matching["matching"].append({"sent_identifier":sent_identifier, "score":match["score"]})
-
+                #new_kp_matching["matching"].append({"sent_identifier":sent_identifier, "score":match["score"]})
+                new_kp_matching["matching"].append({"comment_id":comment_id, "sentence_id":int(sent_id_in_comment), "score":match["score"]})
                 if comment_id not in sentences_data:
                     sentences_data[comment_id] = {"sents_in_comment":match["sents_in_comment"], "sentences":{}}
 
@@ -383,13 +343,12 @@ class KpaResult:
                                   include_match_score_in_docx=include_match_score_in_docx,
                                   min_n_matches_in_docx=min_n_matches_in_docx)
 
-
     def print_result(self, n_sentences_per_kp, title, n_top_kps = None):
         '''
         Prints the key point analysis result to console.
         :param n_sentences_per_kp: number of top matched sentences to display for each key point
         :param title: title to print for the analysis
-        :param n_top_kps: optional, maximal number of kps to display.
+        :param n_top_kps: maximal number of kps to display.
         '''
         def split_sentence_to_lines(sentence, max_len=90):
             if len(sentence) <= max_len:
@@ -473,83 +432,125 @@ class KpaResult:
                        if kp['keypoint'] != 'none' or include_none}
         return kps_n_args
 
-    def compare_with_other(self, other_result, this_title, other_title):
+    def get_kp_to_n_matched_comments(self, comments_subset = None):
+        kp_n_comments = {}
+        for keypoint_matching in self.result_json['keypoint_matchings']:
+            kp = keypoint_matching["keypoint"]
+            matching_comments_set = set(match["comment_id"] for match in keypoint_matching["matching"])
+
+            if comments_subset:
+                matching_comments_set = set(filter(lambda x:x in comments_subset, matching_comments_set))
+
+            n_matches = len(matching_comments_set)
+            kp_n_comments[kp] = n_matches
+        return kp_n_comments
+
+    def compare_with_comment_subsets(self, comments_subsets_dicts):
+        """
+        :param subset_dicts: dict from subest_name to set of comment ids
+        """
+        results_to_total_comments = {"full": self.get_number_of_unique_comments()}
+        results_to_total_comments.update({title: len(comments_subsets_dicts[title]) for title in comments_subsets_dicts})
+
+        titles = ["full"] + sorted(comments_subsets_dicts.keys(), key=lambda x: results_to_total_comments[x], reverse=True)
+
+        results_to_kp_to_n_comments = {"full": self.get_kp_to_n_matched_comments()}
+        results_to_kp_to_n_comments.update(
+            {title: self.get_kp_to_n_matched_comments(comments_subset=comment_ids) for title, comment_ids in comments_subsets_dicts.items()})
+        return self.get_comparison_df(results_to_kp_to_n_comments, results_to_total_comments, titles)
+
+    def compare_with_other_results(self, this_title, other_results_dict):
         """
         Compare this result with another
-        :param other_result: other results to compare with
         :param this_title: title to be associated with this result
-        :param other_title: title to be associated with other_result
-        :return a dataframe that compares the prevalence of all kps in the two results
+        :param other_results_dict: dictionary of result_title to KpaResults
+        :return dataframe containing the number and percentage of the comments matched to each key point in each result,
+        and the change percentage if comparing to a single result.
         """
-        result_1_total_sentences = self.get_number_of_unique_sentences(include_unmatched=True)
-        kps1_n_args = self.get_kp_to_n_matched_sentences(include_none=False)
-        kps1 = set(kps1_n_args.keys())
+        results_to_total_comments = {this_title:self.get_number_of_unique_comments()}
+        results_to_total_comments.update({title:result.get_number_of_unique_comments() for title,result in other_results_dict.items()})
+        titles = [this_title] + sorted(other_results_dict.keys(), key=lambda x:results_to_total_comments[x], reverse=True)
 
-        result_2_total_sentences = other_result.get_number_of_unique_sentences(include_unmatched=True)
-        kps2_n_args = other_result.get_kp_to_n_matched_sentences(include_none=False)
-        kps2 = set(kps2_n_args.keys())
+        results_to_kp_to_n_comments = {this_title:self.get_kp_to_n_matched_comments()}
+        results_to_kp_to_n_comments.update({title:result.get_kp_to_n_matched_comments()  for title,result in other_results_dict.items()})
+        return self.get_comparison_df(results_to_kp_to_n_comments, results_to_total_comments, titles)
 
-        kps_in_both = kps1.intersection(kps2)
-        kps_in_both = sorted(list(kps_in_both), key=lambda kp: kps1_n_args[kp], reverse=True)
-        cols = ['key point', f'{this_title}_n_sents', f'{this_title}_percent', f'{other_title}_n_sents', f'{other_title}_percent',
-                'change_n_sents', 'change_percent']
+    def get_comparison_df(self, results_to_kp_to_n_comments, results_to_total_comments, titles):
+        ordered_kps = []
+        cols = ['key point']
+        for title in titles:
+            n_comments_per_kp_per_title = results_to_kp_to_n_comments[title]
+            new_kps = set(n_comments_per_kp_per_title.keys()).difference(set(ordered_kps))
+            new_kps = sorted(new_kps, key= lambda x:n_comments_per_kp_per_title[x] ,reverse=True)
+            ordered_kps += new_kps
+            cols.extend([f"{title}_n_comments", f"{title}_precent"])
+
+        if "none" in ordered_kps:
+            ordered_kps.remove("none")
+
+        add_change = False
+        if len(titles) == 2:
+            cols.append("change_percent")
+            add_change = True
+
         rows = []
-        for kp in kps_in_both:
-            sents1 = kps1_n_args[kp]
-            sents2 = kps2_n_args[kp]
-            percent1 = (sents1 / result_1_total_sentences) * 100.0
-            percent2 = (sents2 / result_2_total_sentences) * 100.0
-            rows.append([kp, sents1, f'{percent1:.2f}%', sents2, f'{percent2:.2f}%', str(math.floor((sents2 - sents1))),
-                         f'{(percent2 - percent1):.2f}%'])
-        kps1_not_in_2 = kps1 - kps2
-        kps1_not_in_2 = sorted(list(kps1_not_in_2), key=lambda kp: kps1_n_args[kp], reverse=True)
-        for kp in kps1_not_in_2:
-            sents1 = kps1_n_args[kp]
-            percent1 = (sents1 / result_1_total_sentences) * 100.0
-            rows.append([kp, sents1, f'{percent1:.2f}%', '---', '---', '---', '---'])
-        kps2_not_in_1 = kps2 - kps1
-        kps2_not_in_1 = sorted(list(kps2_not_in_1), key=lambda kp: kps2_n_args[kp], reverse=True)
-        for kp in kps2_not_in_1:
-            sents2 = kps2_n_args[kp]
-            percent2 = (sents2 / result_2_total_sentences) * 100.0
-            rows.append([kp, '---', '---', sents2, f'{percent2:.2f}%', '---', '---'])
+        title_to_precent = {}
+        total_row = ["total"]
+        for i,kp in enumerate(ordered_kps):
+            row = [kp]
+            for title in titles:
+                n_comments_title_kp = results_to_kp_to_n_comments[title].get(kp,0)
+                percent_comments_title_kp = (100*n_comments_title_kp/results_to_total_comments[title]) if n_comments_title_kp else 0
+                row.extend([n_comments_title_kp,f'{percent_comments_title_kp:.2f}%'])
+                title_to_precent[title] = percent_comments_title_kp
+                if i == 0:
+                    total_row.extend([results_to_total_comments[title] , "1"])
+            if add_change:
+                change_percent = title_to_precent[titles[1]] - title_to_precent[titles[0]]
+                row.append(f'{change_percent:.2f}%')
+                if i==0:
+                    total_row.append("")
+            rows.append(row)
+        rows.append(total_row)
         comparison_df = pd.DataFrame(rows, columns=cols)
         return comparison_df
-
-    def merge_with_other(self, other_result):
-        """
-        Return a KpaResults with the combined results of this KpaResult and other_result
-        :param other_result: KpaResult object to merge with this one
-        """
-        keypoint_matchings = self.result_json['keypoint_matchings'] + other_result.result_json['keypoint_matchings']
-        keypoint_matchings.sort(key=lambda matchings: len(matchings['matching']), reverse=True)
-
-        sentences_data = self.result_json['sentences_data']
-        for comment_id, comment_data_dict in other_result.result_json["sentences_data"].items():
-            if comment_id not in sentences_data:
-                sentences_data[comment_id] = {"sents_in_comment":comment_data_dict["sents_in_comment"], "sentences":{}}
-            for sent_id_in_comment, sent_data in comment_data_dict:
-                sentences_data[comment_id]["sentences"][sent_id_in_comment] = sent_data
-        combined_results_json = {'keypoint_matchings':keypoint_matchings, "sentences_data":sentences_data, "version":CURR_RESULTS_VERSION}
-        return KpaResult.create_from_result_json(combined_results_json)
-
-    def set_stance_to_result(self, stance):
-        """
-        set the stance of all the key points to 'stance'
-        """
-        for keypoint_matching in self.result_json['keypoint_matchings']:
-            keypoint_matching['stance'] = stance
-        self.result_df["stance"] = stance
 
     @staticmethod
     def get_merged_pro_con_results(pro_result, con_result):
         """
         Combines the results from pro_result and con_result and returns a merged KpaResult
         """
-        pro_result.set_stance_to_result("pro")
-        con_result.set_stance_to_result("con")
-        return pro_result.merge_with_other(con_result)
+        assert pro_result.stances == {"pro"}, f"Pro results stances must be ['pro'], given {pro_result.stances}"
+        assert con_result.stances == {"con"}, f"Con results stances must be ['con'], given {con_result.stances}"
 
+        # pro and con results must be with identical data/params, except for the stance
+        assert con_result.result_json["job_metadata"]["general"] == pro_result.result_json["job_metadata"]["general"]
+        keypoint_matchings = []
+        none_matchings = []
+        for result in [pro_result, con_result]:
+            for keypoint_matching in result.result_json["keypoint_matchings"]:
+                if keypoint_matching["keypoint"] == "none":
+                    none_matchings.extend(keypoint_matching["matching"])
+                else:
+                    keypoint_matchings.append(keypoint_matching)
+        keypoint_matchings.append({'keypoint':'none', 'matching':none_matchings})
+        keypoint_matchings.sort(key=lambda matchings: len(matchings['matching']), reverse=True)
+
+        sentences_data = pro_result.result_json['sentences_data']
+        for comment_id, comment_data_dict in con_result.result_json["sentences_data"].items():
+            if comment_id not in sentences_data:
+                 sentences_data[comment_id] = {"sents_in_comment":comment_data_dict["sents_in_comment"], "sentences":{}}
+            for sent_id_in_comment, sent_data in comment_data_dict["sentences"].items():
+                 sentences_data[comment_id]["sentences"][sent_id_in_comment] = sent_data
+
+        pro_metadata = pro_result.result_json["job_metadata"]
+        con_metadata = con_result.result_json["job_metadata"]
+        new_metadata = {"general":pro_metadata["general"],
+                        "per_stance":{"pro":pro_metadata["per_stance"]["pro"], "con":con_metadata["per_stance"]["con"]}}
+        combined_results_json = {'keypoint_matchings':keypoint_matchings, "sentences_data":sentences_data,
+                                 "version":CURR_RESULTS_VERSION,
+                                 "job_metadata":new_metadata}
+        return KpaResult.create_from_result_json(combined_results_json)
 
 if __name__ == "__main__":
     init_logger()
