@@ -447,13 +447,26 @@ class KpaResult:
             print_kp(kp, stance, keypoint_matching['matching'], sentences_data, n_sentences_per_kp)
 
     def get_number_of_unique_sentences(self, include_unmatched=True):
-        total_sentences = set()
-        for i, keypoint_matching in enumerate(self.result_json['keypoint_matchings']):
-            matches = keypoint_matching['matching']
-            matching_sents_ids = set([d["sent_identifier"] for d in matches])
-            if keypoint_matching['keypoint'] != 'none' or include_unmatched:
-                total_sentences = total_sentences.union(matching_sents_ids)
-        return len(total_sentences)
+        if include_unmatched:
+            return self.result_json["job_metadata"]["general"]["n_sentences"]
+        else:
+            total_sentences = set()
+            for i, keypoint_matching in enumerate(self.result_json['keypoint_matchings']):
+                matching_sents_ids = set([get_unique_sent_id(d) for d in keypoint_matching['matching']])
+                if keypoint_matching['keypoint'] != 'none':
+                    total_sentences = total_sentences.union(matching_sents_ids)
+            return len(total_sentences)
+
+    def get_number_of_unique_comments(self, include_unmatched=True):
+        if include_unmatched:
+            return self.result_json["job_metadata"]["general"]["n_comments"]
+        else:
+            total_comments = set()
+            for i, keypoint_matching in enumerate(self.result_json['keypoint_matchings']):
+                if keypoint_matching['keypoint'] != 'none':
+                    matching_sents_ids = set([d["comment_id"] for d in keypoint_matching['matching']])
+                    total_comments = total_comments.union(matching_sents_ids)
+            return len(total_comments)
 
     def get_kp_to_n_matched_sentences(self, include_none=True):
         kps_n_args = {kp['keypoint']: len(kp['matching']) for kp in self.result_json['keypoint_matchings']
