@@ -387,6 +387,29 @@ class KpAnalysisClient():
         '''
         return self._get(self.host + self_check_endpoint, None, timeout=180)
 
+    def get_unmapped_sentences_for_kpa_result(self, kpa_result: KpaResult):
+        '''
+        Retrieve all unmapped sentences associated with the kpa_result.
+        :param kpa_result: KpaResult object storing the results.
+        :return: a dataframe with all unmapped sentences and their data.
+        '''
+        domain = kpa_result.get_domain()
+        job_ids = kpa_result.get_job_ids()
+        sentences_dfs = []
+
+        if len(job_ids) == 1:
+            sents_df = self.get_sentences_for_domain(domain, list(job_ids)[0])
+        elif len(job_ids) == 2:
+            for job_id in job_ids:
+                sents_df = self.get_sentences_for_domain(domain, job_id)
+                sentences_dfs.append(sents_df)
+            sents_df = pd.concat(sentences_dfs).drop_duplicates(subset=["comment_id","sent_id"])
+
+        mapped_sents_df = kpa_result.result_df.rename(columns={"sentence_id":"sent_id"})
+        unmapped_sents_df = pd.concat([sents_df,mapped_sents_df]).drop_duplicates(subset=["sent_id","comment_id"], keep=False)
+        unmapped_sents_df = unmapped_sents_df[sents_df.columns]
+        return unmapped_sents_df
+
     def get_sentences_for_domain(self, domain: str, job_id: Optional[str] = None):
         '''
         Uploaded comments are cleaned and split into sentences. This method retrieves the sentences in a domain.
