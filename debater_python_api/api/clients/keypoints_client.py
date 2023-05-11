@@ -401,11 +401,11 @@ class KpAnalysisClient():
         :return: a dataframe with all unmapped sentences and their data.
         '''
         domain = kpa_result.get_domain()
-        job_ids = kpa_result.get_job_ids()
+        job_ids = list(kpa_result.get_stance_to_job_id().values())
         sentences_dfs = []
 
         if len(job_ids) == 1:
-            sents_df = self.get_sentences_for_domain(domain, list(job_ids)[0])
+            sents_df = self.get_sentences_for_domain(domain, job_ids[0])
         elif len(job_ids) == 2:
             for job_id in job_ids:
                 sents_df = self.get_sentences_for_domain(domain, job_id)
