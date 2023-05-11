@@ -11,6 +11,7 @@ from KpaResult import KpaResult
 from debater_python_api.api.clients.key_point_analysis.utils import get_default_request_header, update_row_with_stance_data, validate_api_key_or_throw_exception, print_progress_bar
 
 from typing import List, Optional, Dict
+from debater_python_api.utils.kp_analysis_utils import print_progress_bar
 from debater_python_api.api.clients.key_point_analysis.KpaExceptions import KpaIllegalInputException
 
 domains_endpoint = '/domains'
