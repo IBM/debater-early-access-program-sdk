@@ -29,7 +29,7 @@ class KpaResult:
         self.result_json = result_json
         self.result_df = self.create_result_df()
         self.version = CURR_RESULTS_VERSION
-        self.stances = set(result_json["job_metadata"]["per_stance"].keys())
+        self.stances = set(result_json["job_metadata"]["per_stance"].keys()).difference("no-stance")
         self.filter_min_relations_for_text = filter_min_relations
         self.kp_id_to_hierarchical_data = self.get_kp_id_to_hierarchical_data()
         self.summary_df = self.result_df_to_summary_df()
@@ -38,7 +38,7 @@ class KpaResult:
     def get_stance_from_server_stances(server_stances):
 
         if not server_stances or len(server_stances) == 0:
-            return ""
+            return "no-stance"
         if server_stances == ["pos"]:
             return "pro"
         if set(server_stances) == set(["neg", "sug"]):
@@ -48,6 +48,13 @@ class KpaResult:
 
     def get_matadata(self):
         return self.result_json["job_metadata"]
+
+    def get_domain(self):
+        return self.result_json["job_metadata"]["general"]["domain"]
+
+    def get_job_ids(self):
+        per_stance_metadata = self.result_json["job_metadata"]["per_stance"]
+        return set(m["job_id"] for m in per_stance_metadata.values())
 
     def save(self, json_file):
         """
@@ -88,7 +95,7 @@ class KpaResult:
             for match in keypoint_matching['matching']:
                 score = match["score"]
                 comment_id = str(match["comment_id"])
-                sent_id_in_comment = str(match["sentence_id"])
+                sent_id_in_comment = int(match["sentence_id"])
                 comment_data = sentences_data[comment_id]
                 sent_data = comment_data["sentences"][sent_id_in_comment]
 
@@ -211,9 +218,9 @@ class KpaResult:
         new_matchings = []
         for keypoint_matching in result_json['keypoint_matchings']:
             kp = keypoint_matching['keypoint']
-            #kp_stance = keypoint_matching.get('stance', None)
+
             new_kp_matching = {'keypoint': kp, "matching": []}
-            if kps_stance:
+            if kps_stance != "no-stance":
                 new_kp_matching["stance"] = kps_stance
 
             for match in keypoint_matching['matching']:
@@ -223,7 +230,7 @@ class KpaResult:
 
                 #sent_identifier = get_unique_sent_id(match)
                 comment_id = match["comment_id"]
-                sent_id_in_comment = str(match["sentence_id"])
+                sent_id_in_comment = int(match["sentence_id"])
 
                 #new_kp_matching["matching"].append({"sent_identifier":sent_identifier, "score":match["score"]})
                 new_kp_matching["matching"].append({"comment_id":comment_id, "sentence_id":int(sent_id_in_comment), "score":match["score"]})
@@ -238,11 +245,10 @@ class KpaResult:
 
             new_matchings.append(new_kp_matching)
 
-        if kps_stance:
-            per_stance_dict = {kps_stance: filter_dict_by_keys(metadata, ['description', 'run_params', 'job_id',
+
+        per_stance_dict = {kps_stance: filter_dict_by_keys(metadata, ['description', 'run_params', 'job_id',
                                                                           'n_sentences_stance', 'n_comments_stance'])}
-        else:
-            per_stance_dict = {}
+
         metadata_v2 = {"general": filter_dict_by_keys(metadata, ['domain', 'user_id', 'n_sentences',
                                                                  'n_sentences_unfiltered', 'n_comments',
                                                                  'n_comments_unfiltered']),
@@ -325,7 +331,7 @@ class KpaResult:
         :param n_matches_in_docx: optional, number of top matches to write in the textual summary (docx file). Pass None for all matches.
         :param include_match_score_in_docx: optional, when set to true, the match score between the sentence and the key point is added.
         :param min_n_matches_in_docx: optional, remove key points with less than min_n_matches_in_docx matching sentences.
-        Creates 5 outout files:
+        Creates 3 outout files:
              * <ouput_dir>/<result_name>.csv : full results as csv .
              * <ouput_dir>/<result_name>_kps_summary.csv : summary results as csv.
              *  <result_file>_hierarchical.docx: This Microsoft Word document shows the key point hierarchy and matching sentences
@@ -381,7 +387,7 @@ class KpaResult:
             sentences = []
             for match in keypoint_matching:
                 comment_id = str(match["comment_id"])
-                sent_id_in_comment = str(match["sentence_id"])
+                sent_id_in_comment = int(match["sentence_id"])
                 sent = sentences_data[comment_id]['sentences'][sent_id_in_comment]["sentence_text"]
                 sentences.append(sent)
             sentences = sentences[1:(n_sentences_per_kp + 1)]  # first sentence is the kp itself
@@ -427,10 +433,6 @@ class KpaResult:
                     total_comments = total_comments.union(matching_sents_ids)
             return len(total_comments)
 
-    def get_kp_to_n_matched_sentences(self, include_none=True):
-        kps_n_args = {kp['keypoint']: len(kp['matching']) for kp in self.result_json['keypoint_matchings']
-                       if kp['keypoint'] != 'none' or include_none}
-        return kps_n_args
 
     def get_kp_to_n_matched_comments(self, comments_subset = None):
         kp_n_comments = {}
@@ -457,13 +459,13 @@ class KpaResult:
         results_to_kp_to_n_comments = {"full": self.get_kp_to_n_matched_comments()}
         results_to_kp_to_n_comments.update(
             {title: self.get_kp_to_n_matched_comments(comments_subset=comment_ids) for title, comment_ids in comments_subsets_dicts.items()})
-        return self.get_comparison_df(results_to_kp_to_n_comments, results_to_total_comments, titles)
+        return self._get_comparison_df(results_to_kp_to_n_comments, results_to_total_comments, titles)
 
     def compare_with_other_results(self, this_title, other_results_dict):
         """
-        Compare this result with another
-        :param this_title: title to be associated with this result
-        :param other_results_dict: dictionary of result_title to KpaResults
+        Compare this result with other results.
+        :param this_title: title to be associated with this result.
+        :param other_results_dict: dictionary of result_title as keys and KpaResults as values.
         :return dataframe containing the number and percentage of the comments matched to each key point in each result,
         and the change percentage if comparing to a single result.
         """
@@ -473,9 +475,9 @@ class KpaResult:
 
         results_to_kp_to_n_comments = {this_title:self.get_kp_to_n_matched_comments()}
         results_to_kp_to_n_comments.update({title:result.get_kp_to_n_matched_comments()  for title,result in other_results_dict.items()})
-        return self.get_comparison_df(results_to_kp_to_n_comments, results_to_total_comments, titles)
+        return self._get_comparison_df(results_to_kp_to_n_comments, results_to_total_comments, titles)
 
-    def get_comparison_df(self, results_to_kp_to_n_comments, results_to_total_comments, titles):
+    def _get_comparison_df(self, results_to_kp_to_n_comments, results_to_total_comments, titles):
         ordered_kps = []
         cols = ['key point']
         for title in titles:
@@ -517,9 +519,6 @@ class KpaResult:
 
     @staticmethod
     def get_merged_pro_con_results(pro_result, con_result):
-        """
-        Combines the results from pro_result and con_result and returns a merged KpaResult
-        """
         assert pro_result.stances == {"pro"}, f"Pro results stances must be ['pro'], given {pro_result.stances}"
         assert con_result.stances == {"con"}, f"Con results stances must be ['con'], given {con_result.stances}"
 
