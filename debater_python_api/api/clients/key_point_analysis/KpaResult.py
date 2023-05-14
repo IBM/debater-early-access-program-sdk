@@ -70,7 +70,7 @@ class KpaResult:
         self.result_json = result_json
         self.result_df = self._create_result_df()
         self.version = CURR_RESULTS_VERSION
-        self.stances = set(result_json["job_metadata"]["per_stance"].keys()).difference("no-stance")
+        self.stances = set(result_json["job_metadata"]["per_stance"].keys()).difference({"no-stance"})
         self.filter_min_relations_for_text = filter_min_relations
         self.kp_id_to_hierarchical_data = self._get_kp_id_to_hierarchical_data()
         self.summary_df = self._result_df_to_summary_df()
@@ -170,10 +170,10 @@ class KpaResult:
         n_unmapped_comments = n_total_comments - len(all_mapped_comment_ids)
 
         summary_rows = []
-        summary_cols = ["kp", '#comments', 'comments_coverage', "#sentences", 'sentences_coverage', "parent", "n_comments_subtree","stance"]
+        summary_cols = ["kp", '#comments', 'comments_coverage', "#sentences", 'sentences_coverage', "kp_id","parent_id", "n_comments_subtree","stance"]
 
         none_row = ["none", n_unmapped_comments, n_unmapped_comments/n_total_comments, n_unmapped_sentences, n_unmapped_sentences/n_total_sentences,
-                    "-","-", "-"]
+                    "", "","", ""]
         summary_rows.append(none_row)
 
         for kp, kp_dicts in kp_to_dicts.items():
@@ -185,16 +185,17 @@ class KpaResult:
             n_comments = len(set([d["comment_id"] for d in kp_dicts]))
             comments_coverage = n_comments / n_total_comments if n_total_comments > 0 else 0.0
 
-            kp_to_data = self.kp_id_to_hierarchical_data[kp_to_id[kp]]
+            kp_id = kp_to_id[kp]
+            kp_to_data = self.kp_id_to_hierarchical_data[kp_id]
             parent = kp_to_data['parent']
             n_comments_in_subtree = kp_to_data['n_matching_comments_in_subtree']
             kp_stance = kp_to_data.get('kp_stance', "")
 
             summary_row = [kp, n_comments, comments_coverage, n_sentences, sentence_coverage,
-                           parent, n_comments_in_subtree, kp_stance]
+                           kp_id, parent, n_comments_in_subtree, kp_stance]
             summary_rows.append(summary_row)
 
-        summary_rows = sorted(summary_rows, key=lambda x: x[1], reverse=True)
+        summary_rows = sorted(summary_rows, key=lambda x: x[summary_cols.index("#comments")], reverse=True)
         for stance in self.stances:
             stance_data = self.result_json["job_metadata"]["per_stance"][stance]
             stance_n_comments = stance_data["n_comments_stance"]
@@ -202,9 +203,9 @@ class KpaResult:
             stance_n_sentences = stance_data["n_sentences_stance"]
             stance_sentence_coverage = stance_n_sentences / n_total_sentences
             stance_row = [stance, stance_n_comments, stance_comment_coverage, stance_n_sentences, stance_sentence_coverage,
-                          "","",stance]
+                          "","","",stance]
             summary_rows.append(stance_row)
-        total_row = ["total",n_total_comments, 1, n_total_sentences, 1, "","",""]
+        total_row = ["total",n_total_comments, 1, n_total_sentences, 1, "","","",""]
         summary_rows.append(total_row)
 
         return pd.DataFrame(summary_rows, columns=summary_cols)
