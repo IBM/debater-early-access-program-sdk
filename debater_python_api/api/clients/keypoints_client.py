@@ -26,7 +26,7 @@ class Stance(Enum):
     PRO = "pro"
     CON = "con"
     NO_STANCE = "no-stance"
-    EACH_STANCE = "each_stance"
+    EACH_STANCE = "each-stance"
 
 class KpAnalysisClient():
     '''
@@ -199,11 +199,11 @@ class KpAnalysisClient():
         :param domain: the name of the domain
         :param comments_ids: optional, when None is passed, it uses all comments in the domain (typical usage) otherwise it only uses the comments according to the provided list of comments_ids.
         :param run_params: optional,a dictionary with different parameters and their values. For full documentation of supported run_params see https://github.com/IBM/debater-eap-tutorial/blob/main/survey_usecase/kpa_parameters.pdf
-        :param description: optional, add a description to a job so it will be easy to detect it in the user-report. if stance=="each_stance",
+        :param description: optional, add a description to a job so it will be easy to detect it in the user-report. if stance=="each-stance",
         the stance of each job will be added to the description
         :param stance: Optional, default to "no-stance". If "no-stance" - run on all the data disregarding the stance.
         If "pro", run on positive sentences only, if "con", run on con sentences (negative and suggestions).
-        If "each_stance", starts two kpa jobs, one for each stance, and returns the merged result object.
+        If "each-stance", starts two kpa jobs, one for each stance, and returns the merged result object.
         :return: a KpaResult object with the result. if running per stance - returns the merged pro and con results.
         """
 
@@ -220,14 +220,14 @@ class KpAnalysisClient():
         :param comments_ids: optional, when None is passed, it uses all comments in the domain (typical usage) otherwise it only uses the comments according to the provided list of comments_ids.
         :param run_params: optional, a dictionary with different parameters and their values. For full documentation of supported run_params see https://github.com/IBM/debater-eap-tutorial/blob/main/survey_usecase/kpa_parameters.pdf
         :param stance: Optional, default to "no-stance". If "no-stance" - run on all the data disregarding the stance.
-        If "pro", run on positive sentences only, if "con", run on con sentences (negative and suggestions). if "each_stance",
+        If "pro", run on positive sentences only, if "con", run on con sentences (negative and suggestions). if "each-stance",
         starts two jobs, one for each stance.
-        :param description: optional, add a description to a job so it will be easy to detect it in the user-report. If stance is "each_stance",
+        :param description: optional, add a description to a job so it will be easy to detect it in the user-report. If stance is "each-stance",
         the stance of each job will be added to the description.
         :return: a dictionary with the stances as keys and the associated KpAnalysisTaskFuture for each stance:
          an object that enables the retrieval of the results in an async manner.
         """
-        if stance != "each_stance":
+        if stance != Stance.EACH_STANCE.value:
             future = self._run_single_job_async(domain, comments_ids, stance, run_params, description)
             return {stance:future}
 
@@ -293,7 +293,7 @@ class KpAnalysisClient():
         :param comments_texts: a list of comments (strings).
         :param stance: Optional, If "no-stance" - run on all the data disregarding the stance.
         If "pro", run on positive sentences only, if "con", run on con sentences (negative and suggestions).
-        If "each_stance", starts two kpa jobs, one for each stance, and returns the merged result object.
+        If "each-stance", starts two kpa jobs, one for each stance, and returns the merged result object.
         :param run_params: optional, run_params for the run.
         :param description: add a description to a job so it will be easy to detect it in the user-report.
         :return: a KpaResult object with the result
@@ -398,7 +398,7 @@ class KpAnalysisClient():
         '''
         Retrieve all unmapped sentences associated with the kpa_result.
         :param kpa_result: KpaResult object storing the results.
-        :return: a dataframe with all unmapped sentences and their data.
+        :return: a dataframe with all unmapped sentences and their data, or None if domain
         '''
         domain = kpa_result.get_domain()
         job_ids = list(kpa_result.get_stance_to_job_id().values())
@@ -411,6 +411,10 @@ class KpAnalysisClient():
                 sents_df = self.get_sentences_for_domain(domain, job_id)
                 sentences_dfs.append(sents_df)
             sents_df = pd.concat(sentences_dfs).drop_duplicates(subset=["comment_id","sent_id"])
+
+        if len(sents_df) == 0:
+            logging.info("No sentences found for result, maybe the domain was deleted?")
+            return None
 
         mapped_sents_df = kpa_result.result_df.rename(columns={"sentence_id":"sent_id"})
         unmapped_sents_df = pd.concat([sents_df,mapped_sents_df]).drop_duplicates(subset=["sent_id","comment_id"], keep=False)
