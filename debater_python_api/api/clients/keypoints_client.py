@@ -10,7 +10,7 @@ import requests
 from KpaResult import KpaResult
 from debater_python_api.api.clients.key_point_analysis.utils import get_default_request_header, update_row_with_stance_data, validate_api_key_or_throw_exception, print_progress_bar
 
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union
 from debater_python_api.utils.kp_analysis_utils import print_progress_bar
 from debater_python_api.api.clients.key_point_analysis.KpaExceptions import KpaIllegalInputException
 
@@ -88,7 +88,7 @@ class KpAnalysisClient():
     def _is_list_of_strings(self, lst):
         return isinstance(lst, list) and len([a for a in lst if not isinstance(a, str)]) == 0
 
-    def create_domain(self, domain, domain_params=None, ignore_exists=False):
+    def create_domain(self, domain:str, domain_params:Optional[Dict[str, Union[str, int, bool]]] = None, ignore_exists:Optional[bool] = False) -> None:
         """
         Create a new domain and customize domain's parameters.
         :param domain: the name of the new domain (must not exist already)
@@ -99,6 +99,7 @@ class KpAnalysisClient():
         If False, raises an exception.
         """
         try:
+            KpAnalysisClient._validate_params_dict(domain_params, "domain")
             body = {'domain': domain}
             if domain_params is not None:
                 body['domain_params'] = domain_params
@@ -166,6 +167,7 @@ class KpAnalysisClient():
         '''
         Waits for all comments in a domain to be processed.
         :param domain: the name of the domain
+        :param polling_timeout_secs: optional, polling time in seconds
         '''
         while True:
             res = self.get_comments_status(domain)
@@ -192,7 +194,8 @@ class KpAnalysisClient():
         return run_params
 
     def run_kpa_job(self, domain: str, comments_ids: Optional[List[str]]=None,
-                              run_params=None, description: Optional[str]=None, stance: Optional[Stance]=Stance.NO_STANCE.value):
+                    run_params: Optional[Dict[str, Union[int, str, List[str], bool, float]]] = None,
+                    description: Optional[str]=None, stance: Optional[Stance]=Stance.NO_STANCE.value) -> 'KpaResult':
         """
         Runs Key Point Analysis (KPA) in a synchronous manner: starts the job, waits for the results and return them.
         Please make sure all comments had already been uploaded into a domain and processed before starting a new job (using the wait_till_all_comments_are_processed method).
@@ -211,8 +214,9 @@ class KpAnalysisClient():
         keypoint_matching = KpAnalysisTaskFuture.get_result_from_futures(stance_to_future, high_verbosity=True)
         return keypoint_matching
 
-    def run_kpa_job_async(self, domain: str, comments_ids: Optional[List[str]]=None, stance = None,
-                              run_params=None, description: Optional[str]=None) -> 'KpAnalysisTaskFuture':
+    def run_kpa_job_async(self, domain: str, comments_ids: Optional[List[str]]=None, stance: Optional[Stance]=Stance.NO_STANCE.value,
+                              run_params:Optional[Dict[str, Union[int, str, List[str], bool, float]]] = None,
+                              description: Optional[str]=None) -> Dict[Stance, 'KpAnalysisTaskFuture']:
         """
         Starts a Key Point Analysis (KPA) job in an async manner. Please make sure all comments had already been
         uploaded into a domain and processed before starting a new job (using the wait_till_all_comments_are_processed method).
@@ -227,6 +231,7 @@ class KpAnalysisClient():
         :return: a dictionary with the stances as keys and the associated KpAnalysisTaskFuture for each stance:
          an object that enables the retrieval of the results in an async manner.
         """
+        KpAnalysisClient._validate_params_dict(run_params, 'run')
         if stance != Stance.EACH_STANCE.value:
             future = self._run_single_job_async(domain, comments_ids, stance, run_params, description)
             return {stance:future}
@@ -280,7 +285,10 @@ class KpAnalysisClient():
 
         return self._get(self.host + kp_extraction_endpoint, params, timeout=180)
 
-    def run_full_kpa_flow(self, domain, comments_texts: List[str], stance=None, run_params={}, description=None):
+    def run_full_kpa_flow(self, domain: str, comments_texts: List[str],
+                          stance:Optional[str]=Stance.NO_STANCE.value,
+                          run_params:Optional[Dict[str, Union[int, str, List[str], bool, float]]]=None,
+                          description:Optional[str] = None) -> 'KpaResult':
         '''
         This is the simplest way to use the Key Point Analysis system.
         This method uploads the comments into a temporary domain, waits for them to be processed,
@@ -300,6 +308,7 @@ class KpAnalysisClient():
         '''
         if len(comments_texts) > 10000:
             raise Exception('Please use the stagged mode (upload_comments, run_kpa_job) for jobs with more then 10000 comments')
+        KpAnalysisClient._validate_params_dict(run_params, 'run')
         try:
             logging.info(f'Deleting domain {domain}')
             self.delete_domain_cannot_be_undone(domain)
@@ -361,7 +370,6 @@ class KpAnalysisClient():
                 raise e
             logging.info(f'domain: {domain} doesn\'t exist.')
 
-
     def delete_all_domains_cannot_be_undone(self):
         '''
         Deletes all user's domains. Stops all running jobs and cancels all pending jobs in all domains. Erases the data (comments and sentences) in all domains and clears all domains' caches.
@@ -379,7 +387,7 @@ class KpAnalysisClient():
         '''
         return self._get(self.host + report_endpoint, {'days_ago': days_ago}, timeout=180)
 
-    def get_comments_limit(self):
+    def get_comments_limit(self) -> int:
         '''
         Retreives a json with the permitted number of comments per KPA job.
         returns:
@@ -502,6 +510,18 @@ class KpAnalysisClient():
             for kp_analysis_status in kp_analysis_statuses:
                 logging.info(f'    Job: {str(kp_analysis_status)}')
 
+    @staticmethod
+    def _validate_params_dict(params_dict, params_type:str):
+        if params_dict is None:
+            return
+        if not isinstance(params_dict, dict):
+            raise KpaIllegalInputException(f'{params_type}_params must be a dictionary, given: {type(params_dict)}')
+
+        for k,v in params_dict.items():
+            if not isinstance(k, str):
+                raise KpaIllegalInputException(f'{params_type}_params keys must be a strings, given: {type(k)}:{k}')
+            if type(v) not in [list, str, int, float, bool]:
+                raise KpaIllegalInputException(f'unsupported {params_type}_params value type: {type(v)}:{v}')
 
 class KpAnalysisTaskFuture:
     '''
@@ -527,7 +547,7 @@ class KpAnalysisTaskFuture:
 
     def get_result(self, top_k_kps: Optional[int] = None, top_k_sentences_per_kp: Optional[int] = None,
                    dont_wait: bool = False, wait_secs: Optional[int] = None, polling_timeout_secs: Optional[int] = None,
-                   high_verbosity: bool = True):
+                   high_verbosity: bool = True) -> KpaResult:
         '''
         Retreives the job's result. This method polls and waits till the job is done and the result is available.
         :param top_k_kps: use this parameter to truncate the result json to have only the top K key points.
@@ -587,7 +607,7 @@ class KpAnalysisTaskFuture:
 
     @staticmethod
     def get_result_from_futures(stance_to_future, top_k_kps: Optional[int] = None, top_k_sentences_per_kp: Optional[int] = None,
-                   polling_timeout_secs: Optional[int] = None,  high_verbosity: bool = True):
+                   polling_timeout_secs: Optional[int] = None,  high_verbosity: bool = True) -> KpaResult:
         """
         Retreives the job's result. This method polls and waits till the job is done and the result is available.
         :param stance_to_future: the dictionary returned from "run_kpa_job_async"
