@@ -116,12 +116,28 @@ class KpAnalysisClient():
             logging.info(f'domain: {domain} already exists, domain_params are NOT updated.')
 
     def upload_comments(self, domain: str, comments_ids: List[str], comments_texts: List[str]) -> None:
-        '''
+        """
         Uploads comments into a domain. It is mandatory to create a domain before uploading comments into it.
         Re-uploading the same comments (same domain + comment_id + text) is relatively quick.
         Uploading an the same comment_id with a different text will raise an exception.
+        Processing comments (cleaning + sentence splitting + calculating scores) takes some time. The progress will
+        be displayed on screen and the method will return only when all comments are processed.
+        :param domain: the name of the domain to upload the comments into. (usually one  per data-set).
+        :param comments_ids: a list of comment ids (strings), comment ids must be unique.
+        :param comments_texts: a list of comments (strings), this list must be the same length as comments_ids and the comment_id and comment_text should match by position in the list.
+        """
+        self.upload_comments_async(domain, comments_ids, comments_texts)
+        logging.info('waiting for the comments to be processed')
+        self.wait_till_all_comments_are_processed(domain)
+
+    def upload_comments_async(self, domain: str, comments_ids: List[str], comments_texts: List[str]) -> None:
+        '''
+        Uploads comments into a domain in an async manner.
+        It is mandatory to create a domain before uploading comments into it.
+        Re-uploading the same comments (same domain + comment_id + text) is relatively quick.
+        Uploading an the same comment_id with a different text will raise an exception.
         Processing comments (cleaning + sentence splitting + calculating scores) takes some time,
-        please wait for it to finish before starting a key point analysis job (using method wait_till_all_comments_are_processed).
+        please wait for it to finish before starting a key point analysis job, using get_comments_status or are_all_comments_processed.
         :param domain: the name of the domain to upload the comments into. (usually one  per data-set).
         :param comments_ids: a list of comment ids (strings), comment ids must be unique.
         :param comments_texts: a list of comments (strings), this list must be the same length as comments_ids and the comment_id and comment_text should match by position in the list.
@@ -153,6 +169,7 @@ class KpAnalysisClient():
     def get_comments_status(self, domain: str) -> Dict[str, int]:
         '''
         Get the status of the comments in a domain.
+        All comments are processed and a kpa job can start when there are no more pending comments.
         :param domain: the name of the domain
         :return: a dictionary with the status:
         * processed_comments: number of comments that where already processed
@@ -162,6 +179,15 @@ class KpAnalysisClient():
         res = self._get(self.host + comments_endpoint, {'domain': domain})
         logging.info('domain: %s, comments status: %s' % (domain, str(res)))
         return res
+
+    def are_all_comments_processed(self, domain: str) -> bool:
+        """
+        Check if all comments in the domain are processed.
+        :param domain: the name of the domain
+        :return: True if all comments uploaded to the domain are processed.
+        """
+        res = self._get(self.host + comments_endpoint, {'domain': domain})
+        return res['pending_comments'] == 0
 
     def wait_till_all_comments_are_processed(self, domain: str, polling_timeout_secs: Optional[int] = None) -> None:
         '''
@@ -177,12 +203,12 @@ class KpAnalysisClient():
 
     @staticmethod
     def _get_run_params_with_stance(run_params, stance):
-        assert "stances_to_run" not in run_params, "stances_to_run is set interanlly by the client, please use the 'stance' method parameter instead."
         if stance == Stance.NO_STANCE.value:
             return run_params
         if not run_params:
             run_params = {}
         else:
+            assert "stances_to_run" not in run_params, "stances_to_run is set interanlly by the client, please use the 'stance' method parameter instead."
             run_params = run_params.copy()
 
         if stance == Stance.PRO.value:
@@ -231,6 +257,9 @@ class KpAnalysisClient():
         :return: a dictionary with the stances as keys and the associated KpAnalysisTaskFuture for each stance:
          an object that enables the retrieval of the results in an async manner.
         """
+        if not self.are_all_comments_processed(domain):
+            raise KpaIllegalInputException("Please wait until all comments are processed before starting a kpa job.")
+
         KpAnalysisClient._validate_params_dict(run_params, 'run')
         if stance != Stance.EACH_STANCE.value:
             future = self._run_single_job_async(domain, comments_ids, stance, run_params, description)
@@ -317,8 +346,6 @@ class KpAnalysisClient():
 
             comments_ids = [str(i) for i in range(len(comments_texts))]
             self.upload_comments(domain, comments_ids, comments_texts)
-            logging.info('waiting for the comments to be processed')
-            self.wait_till_all_comments_are_processed(domain)
             keypoint_matching = self.run_kpa_job(domain, run_params=run_params, description=description, stance = stance)
             return keypoint_matching
         finally:
