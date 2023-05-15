@@ -43,6 +43,7 @@ class KpAnalysisClient():
         self.show_process = True
         self.host = host if host is not None else 'https://keypoint-matching-backend.debater.res.ibm.com'
         self.verify_certificate = verify_certificate
+        self.api_version = "2"
 
     def _delete(self, url, params, timeout=300, retries=10, headers=None):
         return self._run_request_with_retry(requests.delete, url, params, timeout, retries, headers)
@@ -58,6 +59,7 @@ class KpAnalysisClient():
         if headers_input is not None:
             headers.update(headers_input)
 
+        params["api_version"] = self.api_version
         logging.info('client calls service (%s): %s' % (func.__name__, url))
         while True:
             try:
@@ -276,7 +278,7 @@ class KpAnalysisClient():
 
     def _run_single_job_async(self, domain: str, comments_ids: Optional[List[str]]=None, stance = None,
                               run_params=None, description: Optional[str]=None):
-        body = {'domain': domain, "api_version": "2"}
+        body = {'domain': domain}
 
         if comments_ids is not None:
             body['comments_ids'] = comments_ids
