@@ -316,44 +316,6 @@ class KpAnalysisClient():
 
         return self._get(self.host + kp_extraction_endpoint, params, timeout=180)
 
-    def run_full_kpa_flow(self, domain: str, comments_texts: List[str],
-                          stance:Optional[str]=Stance.NO_STANCE.value,
-                          run_params:Optional[Dict[str, Union[int, str, List[str], bool, float]]]=None,
-                          description:Optional[str] = None) -> 'KpaResult':
-        '''
-        This is the simplest way to use the Key Point Analysis system.
-        This method uploads the comments into a temporary domain, waits for them to be processed,
-        starts a Key Point Analysis job using all comments, and waits for the results. Eventually, the domain is deleted.
-        It is possible to use this method for up to 10000 comments. For longer jobs, please run the system in a staged
-        manner (upload the comments yourself, start a job etc').
-        If execution stopped before this method returned, please run client.delete_domain_cannot_be_undone(<domain>)
-        to free resources and avoid longer waiting in future calls.  TODO Remove comment?
-        :param domain: name of the temporary domain to store the comments. if the domain already exists, it is deleted and created again.
-        :param comments_texts: a list of comments (strings).
-        :param stance: Optional, If "no-stance" - run on all the data disregarding the stance.
-        If "pro", run on positive sentences only, if "con", run on con sentences (negative and suggestions).
-        If "each-stance", starts two kpa jobs, one for each stance, and returns the merged result object.
-        :param run_params: optional, run_params for the run.
-        :param description: add a description to a job so it will be easy to detect it in the user-report.
-        :return: a KpaResult object with the result
-        '''
-        if len(comments_texts) > 10000:
-            raise Exception('Please use the stagged mode (upload_comments, run_kpa_job) for jobs with more then 10000 comments')
-        KpAnalysisClient._validate_params_dict(run_params, 'run')
-        try:
-            logging.info(f'Deleting domain {domain}')
-            self.delete_domain_cannot_be_undone(domain)
-            logging.info(f'Creating domain {domain}')
-            self.create_domain(domain, domain_params={"do_stance_analysis":True})
-
-            comments_ids = [str(i) for i in range(len(comments_texts))]
-            self.upload_comments(domain, comments_ids, comments_texts)
-            keypoint_matching = self.run_kpa_job(domain, run_params=run_params, description=description, stance = stance)
-            return keypoint_matching
-        finally:
-            self.delete_domain_cannot_be_undone(domain)
-
-
     def cancel_kpa_job(self, job_id: str):
         '''
         Stops a running key point analysis job.
