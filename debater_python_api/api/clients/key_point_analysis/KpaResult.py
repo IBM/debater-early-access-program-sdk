@@ -7,7 +7,7 @@ from collections import defaultdict
 import pandas as pd
 import numpy as np
 
-from KpaExceptions import KpaIllegalInputException
+from debater_python_api.api.clients.key_point_analysis.KpaExceptions import KpaIllegalInputException
 from debater_python_api.api.clients.key_point_analysis.utils import read_dicts_from_df, create_dict_to_list, \
     write_df_to_file, get_unique_sent_id, filter_dict_by_keys
 from debater_python_api.api.clients.key_point_analysis.docx_generator import save_hierarchical_graph_data_to_docx

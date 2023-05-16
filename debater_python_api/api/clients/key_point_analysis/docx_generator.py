@@ -6,7 +6,7 @@ from docx.enum.dml import MSO_THEME_COLOR_INDEX
 from docx.shared import Inches, Pt, RGBColor
 from docx import Document
 
-from KpaExceptions import KpaIllegalInputException
+from debater_python_api.api.clients.key_point_analysis.KpaExceptions import KpaIllegalInputException
 from debater_python_api.api.clients.key_point_analysis.utils import create_dict_to_list, \
     trunc_float, read_dicts_from_df, get_unique_sent_id
 
