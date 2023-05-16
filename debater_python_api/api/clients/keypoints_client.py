@@ -8,7 +8,8 @@ from debater_python_api.api.clients.abstract_client import AbstractClient
 from debater_python_api.utils.general_utils import get_default_request_header
 from typing import List, Optional, Dict
 from debater_python_api.utils.kp_analysis_utils import print_progress_bar
-from debater_python_api.api.clients.key_point_analysis.KpaExceptions import KpaIllegalInputException
+from debater_python_api.api.clients.key_point_analysis.KpaExceptions import KpaIllegalInputException, \
+    KpaNoPrivilegesException
 
 domains_endpoint = '/domains'
 comments_endpoint = '/comments'
@@ -63,8 +64,12 @@ class KpAnalysisClient(AbstractClient):
                     msg = 'There is a problem with the request (%d): %s' % (resp.status_code, resp.reason)
                     logging.error(msg)
                     raise KpaIllegalInputException(msg)
+                if resp.status_code == 403:
+                  msg = 'User is not authorized to perform the requested operation (%d): %s' % (resp.status_code, resp.reason)
+                  logging.error(msg)
+                  raise KpaNoPrivilegesException(msg)
                 msg = 'Failed calling server at %s: (%d) %s' % (url, resp.status_code, resp.reason)
-            except KpaIllegalInputException as e:
+            except (KpaIllegalInputException, KpaNoPrivilegesException) as e:
                 raise e
             except Exception as e:
                 track = traceback.format_exc()
