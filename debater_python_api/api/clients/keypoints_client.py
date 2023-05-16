@@ -65,9 +65,9 @@ class KpAnalysisClient(AbstractClient):
                     logging.error(msg)
                     raise KpaIllegalInputException(msg)
                 if resp.status_code == 403:
-                  msg = 'User is not authorized to perform the requested operation (%d): %s' % (resp.status_code, resp.reason)
-                  logging.error(msg)
-                  raise KpaNoPrivilegesException(msg)
+                    msg = 'User is not authorized to perform the requested operation (%d): %s' % (resp.status_code, resp.reason)
+                    logging.error(msg)
+                    raise KpaNoPrivilegesException(msg)
                 msg = 'Failed calling server at %s: (%d) %s' % (url, resp.status_code, resp.reason)
             except (KpaIllegalInputException, KpaNoPrivilegesException) as e:
                 raise e
