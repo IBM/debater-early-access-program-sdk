@@ -12,7 +12,7 @@ from debater_python_api.api.clients.key_point_analysis.utils import get_default_
 
 from typing import List, Optional, Dict, Union
 from debater_python_api.utils.kp_analysis_utils import print_progress_bar
-from debater_python_api.api.clients.key_point_analysis.KpaExceptions import KpaIllegalInputException
+from debater_python_api.api.clients.key_point_analysis.KpaExceptions import KpaIllegalInputException, KpaInvalidOperationException
 
 domains_endpoint = '/domains'
 comments_endpoint = '/comments'
@@ -260,7 +260,10 @@ class KpAnalysisClient():
          an object that enables the retrieval of the results in an async manner.
         """
         if not self.are_all_comments_processed(domain):
-            raise KpaIllegalInputException("Please wait until all comments are processed before starting a kpa job.")
+            raise KpaInvalidOperationException(f"Attempt to start a KPA job on domain {domain} when comments"
+                                               f" are still processing. Please wait until all comments are processed"
+                                               f" before starting a kpa job. You can test the comments status using the"
+                                               f"methods are_all_comments_processed({domain}) or get_comments_status({domain})")
 
         KpAnalysisClient._validate_params_dict(run_params, 'run')
         if stance != Stance.EACH_STANCE.value:
