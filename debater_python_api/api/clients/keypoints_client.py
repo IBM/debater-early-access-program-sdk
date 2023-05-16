@@ -7,7 +7,7 @@ from enum import Enum
 import pandas as pd
 import requests
 
-from KpaResult import KpaResult
+from debater_python_api.api.clients.key_point_analysis.KpaResult import KpaResult
 from debater_python_api.api.clients.key_point_analysis.utils import get_default_request_header, update_row_with_stance_data, validate_api_key_or_throw_exception, print_progress_bar
 
 from typing import List, Optional, Dict, Union
