@@ -6,13 +6,12 @@ from collections import defaultdict
 
 import pandas as pd
 import numpy as np
-from keypoint_analysis.km_utils import init_logger
 
 from KpaExceptions import KpaIllegalInputException
 from debater_python_api.api.clients.key_point_analysis.utils import read_dicts_from_df, create_dict_to_list, \
     write_df_to_file, get_unique_sent_id, filter_dict_by_keys
-from docx_generator import save_hierarchical_graph_data_to_docx
-from graph_generator import create_graph_data, graph_data_to_hierarchical_graph_data, \
+from debater_python_api.api.clients.key_point_analysis.docx_generator import save_hierarchical_graph_data_to_docx
+from debater_python_api.api.clients.key_point_analysis.graph_generator import create_graph_data, graph_data_to_hierarchical_graph_data, \
     get_hierarchical_graph_from_tree_and_subset_results, get_hierarchical_kps_data
 import os
 CURR_RESULTS_VERSION = "2.0"
@@ -556,19 +555,3 @@ class KpaResult:
 
         raise KpaIllegalInputException(f'Unsupported stances {server_stances}')
 
-
-if __name__ == "__main__":
-    init_logger()
-    result_csv = "/Users/lilache/Library/CloudStorage/Box-Box/interview_analysis/austin_results/new_match_models/per_year_results/2018/standalone/Q25/austin_2018_Q25_new_models_neg.csv"
-    #result_csv = "/Users/lilache/Library/CloudStorage/Box-Box/interview_analysis/debater_p_results/2022/final/v0_multi_kps_sbert_stage2_15/eng_kp_input_2022_simplified_multi_kps_merged_kpa_results.csv"
-    # kpa_json_results_old = KpaResult.result_df_to_result_json(pd.read_csv(result_csv), new_version=False)
-    # with open("old_json.json", 'w') as f:
-    #     json.dump(kpa_json_results_old, f)
-    #
-    # new_json = KpaResult.convert_to_v2(kpa_json_results_old)
-    # with open("new_json2.json", 'w') as f:
-    #     json.dump(new_json, f)
-    kpa_result = KpaResult.create_from_result_csv(result_csv)
-    kpa_result.save("new_austin_result.json")
-    #kpa_result.print_result(2, "test")
-    kpa_result.export_to_all_outputs("","test_all_outputs")
