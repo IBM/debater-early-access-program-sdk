@@ -555,3 +555,31 @@ class KpaResult:
 
         raise KpaIllegalInputException(f'Unsupported stances {server_stances}')
 
+    def get_result_with_top_kp_per_sentence(self):
+        """
+        Return the same KpaResult with up to one matching key point per sentence (the key point with the highest matching score).
+        No hierarchy is generated in this settings.
+        :return: new KpaResult after choosing the top kp for each sentence.
+        """
+        new_results_df = self.result_df.sort_values(by=["sentence_text","match_score"], ascending=[True, False])
+        top_preds_df = pd.concat([group.head(1) for _,group in new_results_df.groupby(by="sentence_text")])
+
+        kp_to_args = list(zip(top_preds_df["kp"],zip(top_preds_df["comment_id"], top_preds_df["sentence_id"])))
+        kp_to_args = create_dict_to_list(kp_to_args)
+        new_meta_data = self.result_json["job_metadata"].copy()
+        new_meta_data["general"]["top_kp_per_sent"] = True
+
+        new_keypoint_matchings = []
+        for keypoint_matching in self.result_json["keypoint_matchings"]:
+            new_keypoint_matching = keypoint_matching.copy()
+            kp = new_keypoint_matching["keypoint"]
+            if kp != "none":
+                new_keypoint_matching["matching"] = list(filter(lambda x: (x["comment_id"],int(x["sentence_id"])) in kp_to_args[kp], new_keypoint_matching["matching"]))
+            if len(new_keypoint_matching["matching"]) > 0:
+                new_keypoint_matchings.append(new_keypoint_matching)
+        new_keypoint_matchings.sort(key=lambda x: len(x["matching"]), reverse=True)
+
+        new_json = {"sentences_data": self.result_json["sentences_data"].copy(), "version": self.result_json["version"],
+                    "job_metadata":new_meta_data, "keypoint_matchings":new_keypoint_matchings}
+
+        return KpaResult.create_from_result_json(new_json)
