@@ -20,6 +20,8 @@ def get_stance_to_stance_str(stances):
         return ""
     if isinstance(stances, str):
         stances = [stances]
+    if set(stances) == set(["no-stance"]):
+        return ""
     if len(stances) == 1:
         return stance_to_stance_str[list(stances)[0]]
     if set(stances) == set(["pro","con"]):
@@ -127,7 +129,7 @@ def add_data_stats(meta_data, dicts, kp_id_to_data, document, stances, min_n_mat
             matched_sentences_stance_rate = 100*n_matches_sentences_stance/n_stance_sentences if n_stance_sentences > 0 else 0
             matched_comments_stance_rate = 100*n_matches_comments_stance / n_stance_comments if n_stance_comments > 0 else 0
             s += f'Identified {n_stance_comments} {stance_str} comments (and {n_stance_sentences} {stance_str} sentences).\n'\
-                 f'{int(matched_comments_stance_rate)} of these comments (and {int(matched_sentences_stance_rate)} of these sentences)' \
+                 f'{int(matched_comments_stance_rate)}% of these comments (and {int(matched_sentences_stance_rate)}% of these sentences)' \
                 f' were matched to at least one {kp_stance_str}\n'
     p = document.add_paragraph()
     run = p.add_run(s)
@@ -181,7 +183,7 @@ def save_hierarchical_graph_data_to_docx(full_result_df, kp_id_to_data, result_f
     if min_n_matches is not None:
         kp_id_to_data = {kp_id:kp_id_to_data[kp_id] for kp_id in kp_id_to_data if int(kp_id_to_data[kp_id]['n_matching_sentences'])>=min_n_matches}
 
-    stances = set(data['kp_stance'] for id,data in kp_id_to_data.items() if data['kp_stance'])
+    stances = list(meta_data["per_stance"].keys())#set(data['kp_stance'] for id,data in kp_id_to_data.items() if data['kp_stance'])
     stance_str = get_stance_to_stance_str(stances)
     if stance_str:
         p = document.add_paragraph(stance_str + " Key Points")
@@ -189,7 +191,9 @@ def save_hierarchical_graph_data_to_docx(full_result_df, kp_id_to_data, result_f
         set_heading(p)
     insertHR(heading)
 
+    kps = [data["kp"] for data in kp_id_to_data.values()]
     dicts, _ = read_dicts_from_df(full_result_df)
+    dicts = list(filter(lambda d: d["kp"] in kps, dicts))
     kp_to_dicts = create_dict_to_list([(d['kp'], d) for d in dicts])
 
     add_data_stats(meta_data, dicts, kp_id_to_data, document, stances, min_n_matches)
