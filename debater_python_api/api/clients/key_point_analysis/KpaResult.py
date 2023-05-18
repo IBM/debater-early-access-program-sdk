@@ -435,11 +435,22 @@ class KpaResult:
 
     @staticmethod
     def get_merged_pro_con_results(pro_result, con_result):
-        assert pro_result.stances == {"pro"}, f"Pro results stances must be ['pro'], given {pro_result.stances}"
-        assert con_result.stances == {"con"}, f"Con results stances must be ['con'], given {con_result.stances}"
+        """
+        Merge a pro KpaResult and a con kpa KpaResult to a single merged KpaResult.
+        The two results must be obtained by the same user, over the same domain and the same set of comments.
+        :param pro_result: KpaResult generated from running on stance "PRO".
+        :param con_result: KpaResult generated from running on stance "CON".
+        """
+        assert pro_result.stances == {"pro"}, f"pro_result must be generated from running on stance 'PRO', given {pro_result.stances}"
+        assert con_result.stances == {"con"}, f"con_result must be generated from running on stance 'CON', given {con_result.stances}"
+        con_meta = con_result.result_json["job_metadata"]["general"]
+        pro_meta = pro_result.result_json["job_metadata"]["general"]
+        for k in ["user_id","domain"]:
+            assert con_meta[k] == pro_meta[k], f'pro_result and con_result must have the same {k}, but given {pro_meta[k]} for pro and {con_meta[k]} for con'
+        assert con_meta["n_comments"] == pro_meta['n_comments'], f'pro_result and con_result must be generated from running on' \
+                                                                f' the same set of comments, but pro was run over {pro_meta["n_comments"]}' \
+                                                                f' comments and con over {con_meta["n_comments"]}'
 
-        # pro and con results must be with identical data/params, except for the stance
-        assert con_result.result_json["job_metadata"]["general"] == pro_result.result_json["job_metadata"]["general"]
         keypoint_matchings = []
         none_matchings = []
         for result in [pro_result, con_result]:
