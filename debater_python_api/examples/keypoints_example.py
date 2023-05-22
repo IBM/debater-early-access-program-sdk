@@ -1,4 +1,4 @@
-from debater_python_api.api.clients.key_point_analysis.KpAnalysisUtils import KpAnalysisUtils
+from debater_python_api.api.clients.keypoints_client import KpSummarizationClient
 from debater_python_api.api.debater_api import DebaterApi
 
 debater_api = DebaterApi('PUT_YOUR_API_KEY_HERE')
@@ -17,6 +17,6 @@ comments_texts = [
     'Cannabis is very addictive.'
                   ]
 
-KpAnalysisUtils.init_logger()
-keypoint_matchings = keypoints_client.run(comments_texts)
-KpAnalysisUtils.print_result(keypoint_matchings, n_sentences_per_kp=10, title="KPA Example")
+KpSummarizationClient.init_logger()
+keypoint_matchings_result = keypoints_client.run_full_kps_flow(domain="keypoints_example_domain", comments_texts=comments_texts)
+keypoint_matchings_result.print_result(n_sentences_per_kp=10, title="KPS Example")

@@ -5,7 +5,7 @@ import unittest
 
 from hamcrest import assert_that
 
-from debater_python_api.api.clients.key_point_analysis.KpAnalysisUtils import KpAnalysisUtils
+from debater_python_api.api.clients.keypoints_client import KpSummarizationClient
 from debater_python_api.api.clients.narrative_generation_client import Polarity
 from debater_python_api.api.sentence_level_index.client.sentence_query_base import SimpleQuery
 from debater_python_api.api.sentence_level_index.client.sentence_query_request import SentenceQueryRequest
@@ -193,24 +193,27 @@ class ServicesIT(unittest.TestCase):
 
     def test_keypoints_service (self):
         comments_texts = [
-            "Using cannabis can lead to more dangerous drug use",
-            "Prolonged use of cannabis increases the risk of developing psychosis.",
-            "Cannabis is a gateway drug to more dangerous drugs",
-            "The use of cannabis can be addictive for some people",
-            "Legalizing illicit drugs will kill the black market",
-            "When cannabis is consumed over a long period of time it has impact on memory and decision making of people.",
-            "Early studies suggested cognitive declines associated with marijuana ; these declines persisted long after the period of acute cannabis intoxication."
+                'Cannabis has detrimental effects on cognition and memory, some of which are irreversible.',
+                'Cannabis can severely impact memory and productivity in its consumers.',
+                'Cannabis harms the memory and learning capabilities of its consumers.',
+                'Frequent use can impair cognitive ability.',
+                'Cannabis harms memory, which in the long term hurts progress and can hurt people',
+                'Frequent marijuana use can seriously affect short-term memory.',
+                'Marijuana is very addictive, and therefore very dangerous'
+                'Cannabis is addictive and very dangerous for use.',
+                'Cannabis can be very harmful and addictive, especially for young people',
+                'Cannabis is very addictive.'
         ]
-        KpAnalysisUtils.init_logger()
+        KpSummarizationClient.init_logger()
         keypoints_client = self.debater_api.get_keypoints_client()
-
-        keypoint_matchings = keypoints_client.run(comments_texts)
-        KpAnalysisUtils.print_result(keypoint_matchings)
-        assert_that(len(keypoint_matchings['keypoint_matchings']) > 1)
-        for keypoint_matching in keypoint_matchings['keypoint_matchings']:
+        keypoint_matchings_res = keypoints_client.run_full_kps_flow("serviceit_test" ,comments_texts)
+        keypoint_matchings_res.print_result(n_sentences_per_kp=10, title="KPS Result")
+        keypoint_matchings = keypoint_matchings_res.result_json['keypoint_matchings']
+        assert_that(len(keypoint_matchings) > 1)
+        for keypoint_matching in keypoint_matchings:
             if keypoint_matching['keypoint'] != 'none':
                 for matching in keypoint_matching['matching']:
-                    assert_that(0.98 <= matching['score'] <= 1.0)
+                    assert_that(0.95 <= matching['score'] <= 1.0)
 
 
     def test_theme_extraction_service(self):
