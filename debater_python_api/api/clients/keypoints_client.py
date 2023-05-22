@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 import calendar
@@ -8,7 +9,8 @@ import pandas as pd
 import requests
 
 from debater_python_api.api.clients.key_point_analysis.KpaResult import KpaResult
-from debater_python_api.api.clients.key_point_analysis.utils import get_default_request_header, update_row_with_stance_data, validate_api_key_or_throw_exception, print_progress_bar
+from debater_python_api.api.clients.key_point_analysis.utils import get_default_request_header, \
+    update_row_with_stance_data, validate_api_key_or_throw_exception, print_progress_bar, is_list_of_strings
 
 from typing import List, Optional, Dict, Union
 from debater_python_api.utils.kp_analysis_utils import print_progress_bar
@@ -59,6 +61,7 @@ class KpAnalysisClient():
         if headers_input is not None:
             headers.update(headers_input)
 
+        KpAnalysisClient._validate_request(params)
         params["api_version"] = self.api_version
         logging.info('client calls service (%s): %s' % (func.__name__, url))
         while True:
@@ -87,9 +90,6 @@ class KpAnalysisClient():
                 logging.warning('%s, retries left: %d' % (msg, retries))
                 time.sleep(10)
 
-    def _is_list_of_strings(self, lst):
-        return isinstance(lst, list) and len([a for a in lst if not isinstance(a, str)]) == 0
-
     def create_domain(self, domain:str, domain_params:Optional[Dict[str, Union[str, int, bool]]] = None, ignore_exists:Optional[bool] = False) -> None:
         """
         Create a new domain and customize domain's parameters.
@@ -101,9 +101,9 @@ class KpAnalysisClient():
         If False, raises an exception.
         """
         try:
-            KpAnalysisClient._validate_params_dict(domain_params, "domain")
             body = {'domain': domain}
             if domain_params is not None:
+                KpAnalysisClient._validate_params_dict(domain_params, "domain")
                 body['domain_params'] = domain_params
             self._post(url=self.host + domains_endpoint, body=body)
             logging.info('created domain: %s with domain_params: %s' % (domain, str(domain_params)))
@@ -146,8 +146,8 @@ class KpAnalysisClient():
         '''
         assert len(comments_ids) == len(comments_texts), 'comments_texts and comments_ids must be the same length'
         assert len(comments_ids) == len(set(comments_ids)), 'comments_ids must be unique'
-        assert self._is_list_of_strings(comments_texts), 'comment_texts must be a list of strings'
-        assert self._is_list_of_strings(comments_ids), 'comments_ids must be a list of strings'
+        assert is_list_of_strings(comments_texts), 'comment_texts must be a list of strings'
+        assert is_list_of_strings(comments_ids), 'comments_ids must be a list of strings'
         assert len([c for c in comments_texts if c is None or c == '' or len(c) == 0 or c.isspace()]) == 0, 'comment_texts must not have an empty string in it'
         assert len([c for c in comments_texts if len(c)>3000]) == 0, 'comment_texts must be shorter than 3000 characters'
         logging.info('uploading %d comments in batches' % len(comments_ids))
@@ -288,7 +288,8 @@ class KpAnalysisClient():
         keypoint_matching = future.get_result(high_verbosity=True)
         return keypoint_matching
 
-    def run_kpa_job_async(self, domain: str, comments_ids: Optional[List[str]]=None, stance=None,
+    def run_kpa_job_async(self, domain: str, comments_ids: Optional[List[str]]=None,
+                          stance:Optional[Stance]=Stance.NO_STANCE.value,
                               run_params=None, description: Optional[str]=None) -> 'KpAnalysisTaskFuture':
         """
         Starts a Key Point Analysis (KPA) job in an async manner. Please make sure all comments had already been
@@ -307,13 +308,14 @@ class KpAnalysisClient():
                                                f" before starting a kpa job. You can test the comments status using the"
                                                f"methods are_all_comments_processed({domain}) or get_comments_status({domain})")
         run_params = KpAnalysisClient._get_run_params_with_stance(run_params, stance)
-        KpAnalysisClient._validate_params_dict(run_params, 'run')
         body = {'domain': domain}
 
         if comments_ids is not None:
+            assert is_list_of_strings(comments_ids), 'comments_ids must be a list of strings'
             body['comments_ids'] = comments_ids
 
         if run_params is not None:
+            KpAnalysisClient._validate_params_dict(run_params, 'run')
             body['run_params'] = run_params
 
         if description is not None:
@@ -542,6 +544,18 @@ class KpAnalysisClient():
                 raise KpaIllegalInputException(f'{params_type}_params keys must be a strings, given: {type(k)}:{k}')
             if type(v) not in [list, str, int, float, bool]:
                 raise KpaIllegalInputException(f'unsupported {params_type}_params value type: {type(v)}:{v}')
+
+    @staticmethod
+    def _validate_request(params):
+        for param_name,val in params.items():
+            if param_name in ["domain","job_id","description"]:
+                assert isinstance(val, str), f"{param_name} should be a string, given {type(val)} : {val}"
+            try:
+                json.dumps(val)
+            except TypeError as e:
+                raise TypeError(f"Request could not be sent to server due to invalid parameters: {param_name}:{val}:\n{e}")
+
+
 
 class KpAnalysisTaskFuture:
     '''
