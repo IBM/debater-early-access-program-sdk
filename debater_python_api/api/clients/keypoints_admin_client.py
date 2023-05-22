@@ -2,12 +2,12 @@ import datetime
 import logging
 
 from typing import Optional, List
-from debater_python_api.api.clients.keypoints_client import KpAnalysisClient
+from debater_python_api.api.clients.keypoints_client import KpSummarizationClient
 
 admin_reports_endpoint = '/admin_report'
 admin_actions_endpoint = '/admin_action'
 
-class KpAnalysisAdminClient(KpAnalysisClient):
+class KpSummarizationAdminClient(KpSummarizationClient):
     def __init__(self, admin_password, apikey: str, host: Optional[str]=None, verify_certificate: bool = True):
         super().__init__(apikey, host, verify_certificate)
         self.admin_password = admin_password

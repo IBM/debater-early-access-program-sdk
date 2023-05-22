@@ -8,14 +8,13 @@ from enum import Enum
 import pandas as pd
 import requests
 
-from debater_python_api.api.clients.key_point_analysis.KpaResult import KpaResult
-from debater_python_api.api.clients.key_point_analysis.utils import get_default_request_header, \
+from debater_python_api.api.clients.key_point_summarization.KpsResult import KpsResult
+from debater_python_api.api.clients.key_point_summarization.utils import get_default_request_header, \
     update_row_with_stance_data, validate_api_key_or_throw_exception, print_progress_bar, is_list_of_strings
 
 from typing import List, Optional, Dict, Union
-from debater_python_api.utils.kp_analysis_utils import print_progress_bar
-from debater_python_api.api.clients.key_point_analysis.KpaExceptions import KpaIllegalInputException, \
-    KpaNoPrivilegesException, KpaInvalidOperationException
+from debater_python_api.api.clients.key_point_summarization.KpsExceptions import KpsIllegalInputException, \
+    KpsNoPrivilegesException, KpsInvalidOperationException
 
 domains_endpoint = '/domains'
 comments_endpoint = '/comments'
@@ -31,9 +30,9 @@ class Stance(Enum):
     NO_STANCE = "no-stance"
     EACH_STANCE = "each-stance"
 
-class KpAnalysisClient():
+class KpSummarizationClient():
     '''
-    A client for the Key Point Analysis (KPA) service.
+    A client for the Key Point Summarization (KPS) service.
     '''
     def __init__(self, apikey: str, host: Optional[str] = None, verify_certificate: bool = True):
         '''
@@ -62,7 +61,7 @@ class KpAnalysisClient():
         if headers_input is not None:
             headers.update(headers_input)
 
-        KpAnalysisClient._validate_request(params)
+        KpSummarizationClient._validate_request(params)
         params["api_version"] = self.api_version
         logging.info('client calls service (%s): %s' % (func.__name__, url))
         while True:
@@ -76,13 +75,13 @@ class KpAnalysisClient():
                 if resp.status_code == 422:
                     msg = 'There is a problem with the request (%d): %s' % (resp.status_code, resp.reason)
                     logging.error(msg)
-                    raise KpaIllegalInputException(msg)
+                    raise KpsIllegalInputException(msg)
                 if resp.status_code == 403:
                     msg = 'User is not authorized to perform the requested operation (%d): %s' % (resp.status_code, resp.reason)
                     logging.error(msg)
-                    raise KpaNoPrivilegesException(msg)
+                    raise KpsNoPrivilegesException(msg)
                 msg = 'Failed calling server at %s: (%d) %s' % (url, resp.status_code, resp.reason)
-            except (KpaIllegalInputException, KpaNoPrivilegesException) as e:
+            except (KpsIllegalInputException, KpsNoPrivilegesException) as e:
                 raise e
             except Exception as e:
                 track = traceback.format_exc()
@@ -101,22 +100,22 @@ class KpAnalysisClient():
         :param domain: the name of the new domain (must not exist already)
         :param domain_params: optional, a dictionary with various parameters for the domain.
         For full documentation of the domain
-        params see https://github.com/IBM/debater-eap-tutorial/blob/main/survey_usecase/kpa_parameters.pdf
+        params see https://github.com/IBM/debater-eap-tutorial/blob/main/survey_usecase/kps_parameters.pdf
         :param ignore_exists: optional, default False. When the domain already exists - if True, keeps existing domain.
         If False, raises an exception.
         """
         try:
             body = {'domain': domain}
             if domain_params is not None:
-                KpAnalysisClient._validate_params_dict(domain_params, "domain")
+                KpSummarizationClient._validate_params_dict(domain_params, "domain")
                 body['domain_params'] = domain_params
             self._post(url=self.host + domains_endpoint, body=body)
             logging.info('created domain: %s with domain_params: %s' % (domain, str(domain_params)))
-        except KpaIllegalInputException as e:
+        except KpsIllegalInputException as e:
             if 'already exist' not in str(e):
                 raise e
             if not ignore_exists:
-                raise KpaIllegalInputException(f'domain: {domain} already exists. To run on a new domain, please either select another '
+                raise KpsIllegalInputException(f'domain: {domain} already exists. To run on a new domain, please either select another '
                              f'domain name or delete this domain first by running client.delete_domain_cannot_be_undone({domain}).'
                              f'To allow running on an existing domain set ignore_exists=True ')
 
@@ -144,7 +143,7 @@ class KpAnalysisClient():
         Re-uploading the same comments (same domain + comment_id + text) is relatively quick.
         Uploading an the same comment_id with a different text will raise an exception.
         Processing comments (cleaning + sentence splitting + calculating scores) takes some time,
-        please wait for it to finish before starting a key point analysis job, using get_comments_status or are_all_comments_processed.
+        please wait for it to finish before starting a key point summarization job, using get_comments_status or are_all_comments_processed.
         :param domain: the name of the domain to upload the comments into. (usually one  per data-set).
         :param comments_ids: a list of comment ids (strings), comment ids must be unique.
         :param comments_texts: a list of comments (strings), this list must be the same length as comments_ids and the comment_id and comment_text should match by position in the list.
@@ -176,7 +175,7 @@ class KpAnalysisClient():
     def get_comments_status(self, domain: str) -> Dict[str, int]:
         '''
         Get the status of the comments in a domain.
-        All comments are processed and a kpa job can start when there are no more pending comments.
+        All comments are processed and a kps job can start when there are no more pending comments.
         :param domain: the name of the domain
         :return: a dictionary with the status:
         * processed_comments: number of comments that where already processed
@@ -224,15 +223,15 @@ class KpAnalysisClient():
         elif stance == Stance.CON.value:
             run_params['stance'] = "CON"
         else:
-            raise KpaIllegalInputException(f"Unsupported stance: *{stance}*, supported: no-stance, pro, con.")
+            raise KpsIllegalInputException(f"Unsupported stance: *{stance}*, supported: no-stance, pro, con.")
         return run_params
 
-    def run_full_kpa_flow(self, domain: str, comments_texts: List[str],
+    def run_full_kps_flow(self, domain: str, comments_texts: List[str],
                           stance: Optional[str] = Stance.NO_STANCE.value):
         '''
-        This is the simplest way to use the Key Point Analysis system.
+        This is the simplest way to use the Key Point Summarization system.
         This method uploads the comments into a temporary domain, waits for them to be processed,
-        starts a Key Point Analysis job using all comments, and waits for the results. Eventually, the domain is deleted.
+        starts a Key Point Summarization job using all comments, and waits for the results. Eventually, the domain is deleted.
         It is possible to use this method for up to 10000 comments. For longer jobs, please run the system in a staged
         manner (upload the comments yourself, start a job etc').
         If execution stopped before this method returned, please run client.delete_domain_cannot_be_undone(<domain>)
@@ -242,43 +241,43 @@ class KpAnalysisClient():
         :param comments_texts: a list of comments (strings).
         :param stance: Optional, If "no-stance" - run on all the data disregarding the stance.
         If "pro", run on positive sentences only, if "con", run on con sentences (negative and suggestions).
-        If "each-stance", starts two kpa jobs, one for each stance, and returns the merged result object.
-        :return: a KpaResult object with the result
+        If "each-stance", starts two kps jobs, one for each stance, and returns the merged result object.
+        :return: a KpsResult object with the result
         '''
         if len(comments_texts) > 10000:
             raise Exception(
-                'Please use the stagged mode (upload_comments, run_kpa_job) for jobs with more then 10000 comments')
+                'Please use the stagged mode (upload_comments, run_kps_job) for jobs with more then 10000 comments')
         try:
             self.create_domain(domain, ignore_exists=False)
             comments_ids = [str(i) for i in range(len(comments_texts))]
             self.upload_comments(domain, comments_ids, comments_texts)
             if stance == Stance.EACH_STANCE.value:
-                keypoint_matching = self.run_kpa_job_both_stances(domain)
+                keypoint_matching = self.run_kps_job_both_stances(domain)
             else:
-                keypoint_matching = self.run_kpa_job(domain, stance=stance)
+                keypoint_matching = self.run_kps_job(domain, stance=stance)
             return keypoint_matching
-        except KpaIllegalInputException as e:
+        except KpsIllegalInputException as e:
             if 'already exist' in str(e):
-                raise KpaIllegalInputException(f'Domain {domain} already exists. Please use a new domain name or delete the domain using '
-                                               f'delete_domain_cant_be_undone() to run the full flow. If you wish to run kpa on the existing domain, please'
-                                               f'use the methods run_kpa_job or run_kpa_job_both_stances')
+                raise KpsIllegalInputException(f'Domain {domain} already exists. Please use a new domain name or delete the domain using '
+                                               f'delete_domain_cant_be_undone() to run the full flow. If you wish to run kps on the existing domain, please'
+                                               f'use the methods run_kps_job or run_kps_job_both_stances')
             else:
                 raise e
         finally:
             self.delete_domain_cannot_be_undone(domain)
 
-    def run_kpa_job_both_stances(self, domain: str, comments_ids: Optional[List[str]]=None):
-        future_pro = self.run_kpa_job_async(domain, comments_ids, stance=Stance.PRO.value)
-        future_con = self.run_kpa_job_async(domain, comments_ids, stance=Stance.CON.value)
+    def run_kps_job_both_stances(self, domain: str, comments_ids: Optional[List[str]]=None):
+        future_pro = self.run_kps_job_async(domain, comments_ids, stance=Stance.PRO.value)
+        future_con = self.run_kps_job_async(domain, comments_ids, stance=Stance.CON.value)
         result_pro = future_pro.get_result()
         result_con = future_con.get_result()
-        return KpaResult.get_merged_pro_con_results(pro_result=result_pro, con_result=result_con)
+        return KpsResult.get_merged_pro_con_results(pro_result=result_pro, con_result=result_con)
 
-    def run_kpa_job(self, domain: str, comments_ids: Optional[List[str]]=None,
+    def run_kps_job(self, domain: str, comments_ids: Optional[List[str]]=None,
                     run_params: Optional[Dict[str, Union[int, str, List[str], bool, float]]] = None,
-                    description: Optional[str]=None, stance: Optional[Stance]=Stance.NO_STANCE.value) -> 'KpaResult':
+                    description: Optional[str]=None, stance: Optional[Stance]=Stance.NO_STANCE.value) -> 'KpsResult':
         """
-        Runs Key Point Analysis (KPA) in a synchronous manner: starts the job, waits for the results and return them.
+        Runs Key Point Summarization (KPS) in a synchronous manner: starts the job, waits for the results and return them.
         Please make sure all comments had already been uploaded into a domain and processed before starting a new job (using the get_comments_status or are_all_comments_processed methods).
         :param domain: the name of the domain
         :param comments_ids: optional, when None is passed, it uses all comments in the domain (typical usage) otherwise it only uses the comments according to the provided list of comments_ids.
@@ -287,17 +286,17 @@ class KpAnalysisClient():
         the stance of each job will be added to the description
         :param stance: Optional, default to "no-stance". If "no-stance" - run on all the data disregarding the stance.
         If "pro", run on positive sentences only, if "con", run on con sentences (negative and suggestions).
-        :return: a KpaResult object with the result.
+        :return: a KpsResult object with the result.
         """
-        future = self.run_kpa_job_async(domain, run_params=run_params, comments_ids=comments_ids, stance=stance, description=description)
+        future = self.run_kps_job_async(domain, run_params=run_params, comments_ids=comments_ids, stance=stance, description=description)
         keypoint_matching = future.get_result(high_verbosity=True)
         return keypoint_matching
 
-    def run_kpa_job_async(self, domain: str, comments_ids: Optional[List[str]]=None,
+    def run_kps_job_async(self, domain: str, comments_ids: Optional[List[str]]=None,
                           stance:Optional[Stance]=Stance.NO_STANCE.value,
-                              run_params=None, description: Optional[str]=None) -> 'KpAnalysisTaskFuture':
+                          run_params=None, description: Optional[str]=None) -> 'KpSummarizationTaskFuture':
         """
-        Starts a Key Point Analysis (KPA) job in an async manner. Please make sure all comments had already been
+        Starts a Key Point Summarization (KPS) job in an async manner. Please make sure all comments had already been
         uploaded into a domain and processed before starting a new job (using the using get_comments_status or are_all_comments_processed methods).
         :param domain: the name of the domain
         :param comments_ids: optional, when None is passed, it uses all comments in the domain (typical usage) otherwise it only uses the comments according to the provided list of comments_ids.
@@ -305,14 +304,14 @@ class KpAnalysisClient():
         :param stance: Optional, default to "no-stance". If "no-stance" - run on all the data disregarding the stance.
         If "pro", run on positive sentences only, if "con", run on con sentences (negative and suggestions).
         :param description: optional, add a description to a job so it will be easy to detect it in the user-report.
-        :return: KpAnalysisTaskFuture: an object that enables the retrieval of the results in an async manner
+        :return: KpSummarizationTaskFuture: an object that enables the retrieval of the results in an async manner
         """
         if not self.are_all_comments_processed(domain):
-            raise KpaInvalidOperationException(f"Attempt to start a KPA job on domain {domain} when comments"
+            raise KpsInvalidOperationException(f"Attempt to start a KPS job on domain {domain} when comments"
                                                f" are still processing. Please wait until all comments are processed"
-                                               f" before starting a kpa job. You can test the comments status using the"
+                                               f" before starting a kps job. You can test the comments status using the"
                                                f"methods are_all_comments_processed({domain}) or get_comments_status({domain})")
-        run_params = KpAnalysisClient._get_run_params_with_stance(run_params, stance)
+        run_params = KpSummarizationClient._get_run_params_with_stance(run_params, stance)
         body = {'domain': domain}
 
         if comments_ids is not None:
@@ -320,22 +319,22 @@ class KpAnalysisClient():
             body['comments_ids'] = comments_ids
 
         if run_params is not None:
-            KpAnalysisClient._validate_params_dict(run_params, 'run')
+            KpSummarizationClient._validate_params_dict(run_params, 'run')
             body['run_params'] = run_params
 
         if description is not None:
             body['description'] = description
 
         res = self._post(url=self.host + kp_extraction_endpoint, body=body)
-        logging.info(f'started a kp analysis job - domain: {domain}, stance: {stance}, run_params: {run_params}, {"" if description is None else f"description: {description}, "}job_id: {res["job_id"]}')
-        return KpAnalysisTaskFuture(self, res['job_id'])
+        logging.info(f'started a kp summarization job - domain: {domain}, stance: {stance}, run_params: {run_params}, {"" if description is None else f"description: {description}, "}job_id: {res["job_id"]}')
+        return KpSummarizationTaskFuture(self, res['job_id'])
 
-    def get_kpa_job_status(self, job_id: str, top_k_kps: Optional[int] = None,
+    def get_kps_job_status(self, job_id: str, top_k_kps: Optional[int] = None,
                                      top_k_sentences_per_kp: Optional[int] = None):
         '''
-        Checks for the status of a key point analysis job. It returns a json with a 'status' key that can have one of the following values: PENDING, PROCESSING, DONE, CANCELED, ERROR
+        Checks for the status of a key point summarization job. It returns a json with a 'status' key that can have one of the following values: PENDING, PROCESSING, DONE, CANCELED, ERROR
         If the status is PROCESSING, it also has a 'progress' key that describes the calculation progress.
-        If the status is DONE, it also has a 'result' key that has the result_json, that can be converted into KpaResults using KpaResult.create_from_result_json(result_json)
+        If the status is DONE, it also has a 'result' key that has the result_json, that can be converted into KpsResults using KpsResult.create_from_result_json(result_json)
         If the status is ERROR, it also has a 'error_msg' key that has the description of the error.
         :param job_id: the job_id (can be found in the future returned when the job was started or in the user-report)
         :param top_k_kps: use this parameter to truncate the result json to have only the top K key points.
@@ -352,19 +351,19 @@ class KpAnalysisClient():
 
         return self._get(self.host + kp_extraction_endpoint, params, timeout=180)
 
-    def cancel_kpa_job(self, job_id: str):
+    def cancel_kps_job(self, job_id: str):
         '''
-        Stops a running key point analysis job.
+        Stops a running key point summarization job.
         :param job_id: the job_id
         :return: the request's response
         '''
         logging.info(f"Canceling job {job_id}")
         try:
             return self._delete(self.host + kp_extraction_endpoint, {'job_id': job_id})
-        except KpaIllegalInputException as e:
+        except KpsIllegalInputException as e:
             return
 
-    def cancel_all_kpa_jobs_for_domain(self, domain: str):
+    def cancel_all_kps_jobs_for_domain(self, domain: str):
         '''
         Stops all running jobs and cancels all pending jobs in a domain.
         :param domain: the name of the domain.
@@ -373,7 +372,7 @@ class KpAnalysisClient():
         logging.info(f"Canceling all jobs for domain {domain}")
         return self._delete(self.host + data_endpoint, {'domain': domain, 'clear_kp_analysis_jobs_log': False, 'clear_db': False})
 
-    def cancel_all_kpa_jobs_all_domains(self):
+    def cancel_all_kps_jobs_all_domains(self):
         '''
         Stops all running jobs and cancels all pending jobs in all domains.
         :return: the request's response
@@ -392,7 +391,7 @@ class KpAnalysisClient():
             resp = self._delete(self.host + data_endpoint, {'domain': domain, 'clear_kp_analysis_jobs_log': False, 'clear_db': True})
             logging.info(f'domain: {domain} was deleted')
             return resp
-        except KpaIllegalInputException as e:
+        except KpsIllegalInputException as e:
             if 'doesn\'t have domain' not in str(e):
                 raise e
             logging.info(f'domain: {domain} doesn\'t exist.')
@@ -407,18 +406,18 @@ class KpAnalysisClient():
     def get_full_report(self, days_ago=30):
         '''
         Retreives a json with the user's report.
-        :param days_ago: key point analysis jobs older then this parameter will be filtered out
+        :param days_ago: key point summarization jobs older then this parameter will be filtered out
         returns: The report which consists:
           * 'comments_status': all the domains that the user have and the current status of each domain (number of processed comments, sentences and comments that still need to be processed, similar to get_comments_status method).
-          * 'kp_analysis_status': a list of all key point analysis jobs that the user have/had with all the relevant details and parameters for each job.
+          * 'kp_summarization_status': a list of all key point summarization jobs that the user have/had with all the relevant details and parameters for each job.
         '''
         return self._get(self.host + report_endpoint, {'days_ago': days_ago}, timeout=180)
 
     def get_comments_limit(self) -> int:
         '''
-        Retreives a json with the permitted number of comments per KPA job.
+        Retreives a json with the permitted number of comments per KPS job.
         returns:
-          * 'n_comments_limit': The maximal number of comments permitted per KPA job (None if there is no limit).
+          * 'n_comments_limit': The maximal number of comments permitted per KPS job (None if there is no limit).
         '''
         return self._get(self.host + comments_limit_endpoint, {}, timeout=180)
 
@@ -429,14 +428,14 @@ class KpAnalysisClient():
         '''
         return self._get(self.host + self_check_endpoint, None, timeout=180)
 
-    def get_unmapped_sentences_for_kpa_result(self, kpa_result: KpaResult):
+    def get_unmapped_sentences_for_kps_result(self, kps_result: KpsResult):
         '''
-        Retrieve all unmapped sentences associated with the kpa_result.
-        :param kpa_result: KpaResult object storing the results.
+        Retrieve all unmapped sentences associated with the kps_result.
+        :param kps_result: KpsResult object storing the results.
         :return: a dataframe with all unmapped sentences and their data, or None if domain
         '''
-        domain = kpa_result.get_domain()
-        job_ids = list(kpa_result.get_stance_to_job_id().values())
+        domain = kps_result.get_domain()
+        job_ids = list(kps_result.get_stance_to_job_id().values())
         sentences_dfs = []
 
         if len(job_ids) == 1:
@@ -451,7 +450,7 @@ class KpAnalysisClient():
             logging.info("No sentences found for result, maybe the domain was deleted?")
             return None
 
-        mapped_sents_df = kpa_result.result_df.rename(columns={"sentence_id":"sent_id"})
+        mapped_sents_df = kps_result.result_df.rename(columns={"sentence_id":"sent_id"})
         unmapped_sents_df = pd.concat([sents_df,mapped_sents_df]).drop_duplicates(subset=["sent_id","comment_id"], keep=False)
         unmapped_sents_df = unmapped_sents_df[sents_df.columns]
         return unmapped_sents_df
@@ -460,7 +459,7 @@ class KpAnalysisClient():
         '''
         Uploaded comments are cleaned and split into sentences. This method retrieves the sentences in a domain.
         :param domain: the name of the domain.
-        :param job_id: when provided, it will only return the sentences used in a specific key point analysis job.
+        :param job_id: when provided, it will only return the sentences used in a specific key point summarization job.
         :return: a dataframe with all the sentences' data.
         '''
         res = self._get(self.host + data_endpoint, {'domain': domain, 'get_sentences': True, 'job_id': job_id})
@@ -517,38 +516,38 @@ class KpAnalysisClient():
                 active_domains.append(domain)
                 logging.info(
                     f'    Domain: {domain}, Domain Params: {status["domain_params"]}, Status: {status["data_status"]}')
-        kp_analysis_statuses = user_report['kp_analysis_status']
-        logging.info(f'  Key point analysis - jobs status:')
-        if len(kp_analysis_statuses) == 0:
-            logging.info('    User has no key point analysis jobs history')
+        kp_summarization_statuses = user_report['kp_analysis_status']
+        logging.info(f'  Key point summarization - jobs status:')
+        if len(kp_summarization_statuses) == 0:
+            logging.info('    User has no key point summarization jobs history')
         else:
-            n_total_jobs = len(kp_analysis_statuses)
+            n_total_jobs = len(kp_summarization_statuses)
             if active_domains_only:
-                kp_analysis_statuses = list(filter(lambda x: x["domain"] in active_domains, kp_analysis_statuses))
+                kp_summarization_statuses = list(filter(lambda x: x["domain"] in active_domains, kp_summarization_statuses))
             if job_statuses and len(job_statuses) > 0:
-                kp_analysis_statuses = list(filter(lambda x: x["status"] in job_statuses, kp_analysis_statuses))
+                kp_summarization_statuses = list(filter(lambda x: x["status"] in job_statuses, kp_summarization_statuses))
             if domains_to_show and len(domains_to_show) > 0:
-                kp_analysis_statuses = list(filter(lambda x: x["domain"] in domains_to_show, kp_analysis_statuses))
-            n_displayed_jobs = len(kp_analysis_statuses)
+                kp_summarization_statuses = list(filter(lambda x: x["domain"] in domains_to_show, kp_summarization_statuses))
+            n_displayed_jobs = len(kp_summarization_statuses)
             logging.info(
                 f'  Displaying {n_displayed_jobs} jobs out of {n_total_jobs}: {"only active" if active_domains_only else "all"} domains, '
                 f'{"all" if not job_statuses else job_statuses} jobs statuses, {"all" if not domains_to_show else domains_to_show} domain names')
 
-            for kp_analysis_status in kp_analysis_statuses:
-                logging.info(f'    Job: {str(kp_analysis_status)}')
+            for kp_summarization_status in kp_summarization_statuses:
+                logging.info(f'    Job: {str(kp_summarization_status)}')
 
     @staticmethod
     def _validate_params_dict(params_dict, params_type:str):
         if params_dict is None:
             return
         if not isinstance(params_dict, dict):
-            raise KpaIllegalInputException(f'{params_type}_params must be a dictionary, given: {type(params_dict)}')
+            raise KpsIllegalInputException(f'{params_type}_params must be a dictionary, given: {type(params_dict)}')
 
         for k,v in params_dict.items():
             if not isinstance(k, str):
-                raise KpaIllegalInputException(f'{params_type}_params keys must be a strings, given: {type(k)}:{k}')
+                raise KpsIllegalInputException(f'{params_type}_params keys must be a strings, given: {type(k)}:{k}')
             if type(v) not in [list, str, int, float, bool]:
-                raise KpaIllegalInputException(f'unsupported {params_type}_params value type: {type(v)}:{v}')
+                raise KpsIllegalInputException(f'unsupported {params_type}_params value type: {type(v)}:{v}')
 
     @staticmethod
     def _validate_request(params):
@@ -562,15 +561,15 @@ class KpAnalysisClient():
 
 
 
-class KpAnalysisTaskFuture:
+class KpSummarizationTaskFuture:
     '''
-    A future for an async key point analysis job. Wraps the job_id and uses a provided client for retrieving the job's result.
-    Usually created when starting a key point analysis job but can also be created by a user, by suppling the client and the job_id.
+    A future for an async key point summarization job. Wraps the job_id and uses a provided client for retrieving the job's result.
+    Usually created when starting a key point summarization job but can also be created by a user, by suppling the client and the job_id.
     The job_id can be retrieved from the console (it is printed to console when a job is started) or from the user-report.
     '''
-    def __init__(self, client: KpAnalysisClient, job_id: str):
+    def __init__(self, client: KpSummarizationClient, job_id: str):
         '''
-        Create a KpAnalysisTaskFuture over a job_id for results retrieval.
+        Create a KpSummarizationTaskFuture over a job_id for results retrieval.
         :param client: a client for communicating with the service.
         :param job_id: the job_id. The job_id can be retrieved from the console (it is printed to console when a job is started) or from the user-report.
         '''
@@ -586,7 +585,7 @@ class KpAnalysisTaskFuture:
 
     def get_result(self, top_k_kps: Optional[int] = None, top_k_sentences_per_kp: Optional[int] = None,
                    dont_wait: bool = False, wait_secs: Optional[int] = None, polling_timeout_secs: Optional[int] = None,
-                   high_verbosity: bool = True) -> KpaResult:
+                   high_verbosity: bool = True) -> KpsResult:
         '''
         Retreives the job's result. This method polls and waits till the job is done and the result is available.
         :param top_k_kps: use this parameter to truncate the result json to have only the top K key points.
@@ -595,13 +594,13 @@ class KpAnalysisTaskFuture:
         :param wait_secs: limit the waiting time (in seconds).
         :param polling_timeout_secs: sets the time to wait before polling again (in seconds). The default is 30 seconds.
         :param high_verbosity: set to False to reduce the number of messages printed to the logger.
-        :return: the KpaResult object or throws an exception if an error occurs or if the job was canceled.
+        :return: the KpsResult object or throws an exception if an error occurs or if the job was canceled.
         '''
         start_time = time.time()
 
         do_again = True
         while do_again:
-            result = self.client.get_kpa_job_status(self.job_id, top_k_kps=top_k_kps, top_k_sentences_per_kp=top_k_sentences_per_kp)
+            result = self.client.get_kps_job_status(self.job_id, top_k_kps=top_k_kps, top_k_sentences_per_kp=top_k_sentences_per_kp)
             if result['status'] == 'PENDING':
                 if high_verbosity:
                     logging.info('job_id %s is pending' % self.job_id)
@@ -613,7 +612,7 @@ class KpAnalysisTaskFuture:
             elif result['status'] == 'DONE':
                 logging.info('job_id %s is done, returning result' % self.job_id)
                 json_results = result['result']
-                return KpaResult.create_from_result_json(json_results)
+                return KpsResult.create_from_result_json(json_results)
             elif result['status'] == 'ERROR':
                 error_msg = 'job_id %s has error, error_msg: %s' % (self.job_id, str(result['error_msg']))
                 logging.error(error_msg)
@@ -632,7 +631,7 @@ class KpAnalysisTaskFuture:
         '''
         Cancels (stops) the running job. Please stop unneeded jobs since they use a lot of resources.
         '''
-        self.client.cancel_kpa_job(self.job_id)
+        self.client.cancel_kps_job(self.job_id)
 
     def _print_progress_bar(self, progress):
         if 'total_stages' in progress:

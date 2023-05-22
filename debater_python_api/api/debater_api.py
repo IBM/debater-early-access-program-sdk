@@ -66,7 +66,7 @@ class DebaterApi:
         return narrative_generation_client.NarrativeGenerationClient(self.get_apikey())
 
     def get_keypoints_client(self):
-        return keypoints_client.KpAnalysisClient(self.get_apikey(), 'https://keypoint-matching-backend.debater.res.ibm.com')
+        return keypoints_client.KpSummarizationClient(self.get_apikey(), 'https://keypoint-matching-backend.debater.res.ibm.com')
 
     def get_keypoints_pairs_infer_client(self):
         return keypoints_pairs_infer_client.KpPairsInferClient(self.get_apikey(), 'https://keypoint-matching.debater.res.ibm.com')

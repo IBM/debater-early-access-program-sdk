@@ -6,8 +6,8 @@ from docx.enum.dml import MSO_THEME_COLOR_INDEX
 from docx.shared import Inches, Pt, RGBColor
 from docx import Document
 
-from debater_python_api.api.clients.key_point_analysis.KpaExceptions import KpaIllegalInputException
-from debater_python_api.api.clients.key_point_analysis.utils import create_dict_to_list, \
+from debater_python_api.api.clients.key_point_summarization.KpsExceptions import KpsIllegalInputException
+from debater_python_api.api.clients.key_point_summarization.utils import create_dict_to_list, \
     trunc_float, read_dicts_from_df, get_unique_sent_id
 
 from docx.oxml.shared import OxmlElement
@@ -26,7 +26,7 @@ def get_stance_to_stance_str(stances):
         return stance_to_stance_str[list(stances)[0]]
     if set(stances) == set(["pro","con"]):
         return "Positive and Negative"
-    raise KpaIllegalInputException(f"unsupported stances {stances}")
+    raise KpsIllegalInputException(f"unsupported stances {stances}")
 
 def get_kp_stance_if_needed(id_data, stances):
     return id_data["kp_stance"].capitalize() + ", " if stances == {"pro", "con"} else ""
@@ -177,7 +177,7 @@ def save_hierarchical_graph_data_to_docx(full_result_df, kp_id_to_data, result_f
     style.font.name = 'Calibri'
 
 
-    heading = document.add_heading('Key Point Analysis Results', 1)
+    heading = document.add_heading('Key Point Summarization Results', 1)
     set_heading(heading)
 
     if min_n_matches is not None:

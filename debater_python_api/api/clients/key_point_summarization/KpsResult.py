@@ -7,11 +7,11 @@ from collections import defaultdict
 import pandas as pd
 import numpy as np
 
-from debater_python_api.api.clients.key_point_analysis.KpaExceptions import KpaIllegalInputException
-from debater_python_api.api.clients.key_point_analysis.utils import read_dicts_from_df, create_dict_to_list, \
+from debater_python_api.api.clients.key_point_summarization.KpsExceptions import KpsIllegalInputException
+from debater_python_api.api.clients.key_point_summarization.utils import read_dicts_from_df, create_dict_to_list, \
     write_df_to_file, get_unique_sent_id, filter_dict_by_keys
-from debater_python_api.api.clients.key_point_analysis.docx_generator import save_hierarchical_graph_data_to_docx
-from debater_python_api.api.clients.key_point_analysis.graph_generator import create_graph_data, graph_data_to_hierarchical_graph_data, \
+from debater_python_api.api.clients.key_point_summarization.docx_generator import save_hierarchical_graph_data_to_docx
+from debater_python_api.api.clients.key_point_summarization.graph_generator import create_graph_data, graph_data_to_hierarchical_graph_data, \
     get_hierarchical_graph_from_tree_and_subset_results, get_hierarchical_kps_data
 import os
 CURR_RESULTS_VERSION = "2.0"
@@ -58,9 +58,9 @@ def _get_comparison_df(results_to_kp_to_n_comments, results_to_total_comments, t
     return comparison_df
 
 
-class KpaResult:
+class KpsResult:
     """
-    Class to hold and process the results of a KPA job.
+    Class to hold and process the results of a KPS job.
     """
     def __init__(self, result_json, filter_min_relations=0.4):
         """
@@ -98,12 +98,12 @@ class KpaResult:
         """
         Load results from a json file
         :param json_file: the file to load the results from, obtained using the save() method.
-        :return: KpaResult object.
+        :return: KpsResult object.
         """
         logging.info(f"Loading results from: {json_file}")
         with open(json_file, 'r') as f:
             json_res = json.load(f)
-            return KpaResult.create_from_result_json(json_res)
+            return KpsResult.create_from_result_json(json_res)
 
     def _create_result_df(self):
         sentences_data = self.result_json["sentences_data"]
@@ -129,7 +129,7 @@ class KpaResult:
 
                 match_row = [kp, sent_data["sentence_text"], score, comment_id, int(sent_id_in_comment),
                              comment_data["sents_in_comment"], sent_data["span_start"], sent_data["span_end"], sent_data["num_tokens"],
-                             sent_data["argument_quality"], kp_quality]
+                             sent_data["argument_quality"], kp_quality, sent_data["kp_quality"]]
 
                 if 'stance' in sent_data:
                     stance_dict = sent_data['stance']
@@ -145,7 +145,7 @@ class KpaResult:
                     match_row.append(kp_stance)
                 matchings_rows.append(match_row)
         matchings_cols = ["kp", "sentence_text", "match_score", 'comment_id', 'sentence_id', 'sents_in_comment',
-                          'span_start', 'span_end', 'num_tokens', 'argument_quality', 'kp_quality']
+                          'span_start', 'span_end', 'num_tokens', 'argument_quality', 'kp_quality', "sent_kp_quality"]
         if sentences_have_stance:
             matchings_cols.extend([f'{k}_score' for k in stance_keys] + ["selected_stance", "stance_conf"])
         if kps_have_stance:
@@ -212,29 +212,29 @@ class KpaResult:
     @staticmethod
     def create_from_result_json(result_json, filter_min_relations_for_text=0.4):
         """
-        Create KpaResults from results_json
+        Create KpsResults from results_json
         :param result_json: the json object obtained from the client via "get_result" or "get_result_from_futures"
-        :return: KpaResult object
+        :return: KpsResult object
         """
         if 'keypoint_matchings' not in result_json:
-            raise KpaIllegalInputException("Faulty results json provided: does not contain 'keypoint_matchings'. returning empty results")
+            raise KpsIllegalInputException("Faulty results json provided: does not contain 'keypoint_matchings'. returning empty results")
         else:
             try:
                 version = result_json.get("version", "1.0")
                 if version != CURR_RESULTS_VERSION:
-                    result_json = KpaResult._convert_to_new_version(result_json, version, CURR_RESULTS_VERSION)
-                return KpaResult(result_json, filter_min_relations_for_text)
+                    result_json = KpsResult._convert_to_new_version(result_json, version, CURR_RESULTS_VERSION)
+                return KpsResult(result_json, filter_min_relations_for_text)
             except Exception as e:
-                logging.error("Could not create KpaResults from json.")
+                logging.error("Could not create KpsResults from json.")
                 raise e
 
     @staticmethod
     def _convert_to_new_version(result_json, old_version, new_version):
         if old_version == "1.0" and new_version == "2.0":
-            return KpaResult._convert_v1_to_v2(result_json)
+            return KpsResult._convert_v1_to_v2(result_json)
 
         #can create more conversion methods for future json_result versions...
-        raise KpaIllegalInputException(f"Unsupported results version old: {old_version}, new: {new_version}. "
+        raise KpsIllegalInputException(f"Unsupported results version old: {old_version}, new: {new_version}. "
                                        f"Supported: old = 1.0, new = 2.0")
 
     def generate_docx_report(self, output_dir, result_name,
@@ -266,14 +266,14 @@ class KpaResult:
                                               n_matches_in_docx=50, include_match_score_in_docx=False,
                                               min_n_matches_in_docx=5):
         '''
-        Create hierarchical result for kpa_result, using a precalculated hierarchical results.
+        Create hierarchical result for this result, using a precalculated hierarchical results.
         This is useful when we first create results using the whole data, and then want to calculate the
         hierarchical result of its subset while considering the already existing key points and hierarchy generated over the whole data.
         For example, when we have a large survey, we can first run over the entire data to create a hierarchical
         representation of the full results. Then when we want to evaluate a subset of the survey we can run over a subset of
         the survey using the same key points precomputed in the full survey. Then we create its hierarchical
         representation using the hierarchy of the full survey.
-        :param full_results: KpaResult over the full data.
+        :param full_results: KpsResult over the full data.
         :param output_dir: path to output directory
         :param result_name: name of the results to appear in the output files.
         :param n_top_matches_in_graph : optional, number of top matches to add to the graph_data file.
@@ -301,7 +301,7 @@ class KpaResult:
                               min_n_matches_in_docx=5
                               ):
         """
-        Generates all the kpa available output types.
+        Generates all the kps available output types.
         :param output_dir: path to output directory
         :param result_name: name of the results to appear in the output files.
         :param n_matches_in_docx: optional, number of top matches to write in the textual summary (docx file). Pass None for all matches.
@@ -327,9 +327,9 @@ class KpaResult:
 
     def print_result(self, n_sentences_per_kp, title, n_top_kps = None):
         '''
-        Prints the key point analysis result to console.
+        Prints the key point summarization result to console.
         :param n_sentences_per_kp: number of top matched sentences to display for each key point
-        :param title: title to print for the analysis
+        :param title: title to print for the summarization
         :param n_top_kps: Optional, maximal number of kps to display.
         '''
         def split_sentence_to_lines(sentence, max_len=90):
@@ -421,7 +421,7 @@ class KpaResult:
         """
         Compare this result with other results.
         :param this_title: title to be associated with the current result.
-        :param other_results_dict: dictionary of result titles as keys and KpaResult objects as values.
+        :param other_results_dict: dictionary of result titles as keys and KpsResult objects as values.
         :return: a dataframe containing the number and percentage of the comments matched to each key point in each result,
         and the change percentage if comparing to a single result.
         """
@@ -436,10 +436,10 @@ class KpaResult:
     @staticmethod
     def get_merged_pro_con_results(pro_result, con_result):
         """
-        Merge a pro KpaResult and a con kpa KpaResult to a single merged KpaResult.
+        Merge a pro KpsResult and a con KpsResult to a single merged KpsResult.
         The two results must be obtained by the same user, over the same domain and the same set of comments.
-        :param pro_result: KpaResult generated from running on stance "PRO".
-        :param con_result: KpaResult generated from running on stance "CON".
+        :param pro_result: KpsResult generated from running on stance "PRO".
+        :param con_result: KpsResult generated from running on stance "CON".
         """
         assert pro_result.stances == {"pro"}, f"pro_result must be generated from running on stance 'PRO', given {pro_result.stances}"
         assert con_result.stances == {"con"}, f"con_result must be generated from running on stance 'CON', given {con_result.stances}"
@@ -476,14 +476,14 @@ class KpaResult:
         combined_results_json = {'keypoint_matchings':keypoint_matchings, "sentences_data":sentences_data,
                                  "version":CURR_RESULTS_VERSION,
                                  "job_metadata":new_metadata}
-        return KpaResult.create_from_result_json(combined_results_json)
+        return KpsResult.create_from_result_json(combined_results_json)
 
     @staticmethod
     # If result_json is of the old server version, convert to version 2.0
     # 1.0 - received from the server, must have only one stance (merging pro_con is only on v2)
     def _convert_v1_to_v2(result_json):
         metadata = result_json["job_metadata"]
-        kps_stance = KpaResult._get_stance_from_server_stances(metadata["stances"])
+        kps_stance = KpsResult._get_stance_from_server_stances(metadata["stances"])
         sentences_data = {}
         new_matchings = []
         for keypoint_matching in result_json['keypoint_matchings']:
@@ -508,7 +508,7 @@ class KpaResult:
 
                 if sent_id_in_comment not in sentences_data[comment_id]["sentences"]:
                     sent_data = {c: match[c] for c in
-                                 ["sentence_text", "span_start", "span_end", "num_tokens", "argument_quality"]}
+                                 ["sentence_text", "span_start", "span_end", "num_tokens", "argument_quality","kp_quality"]}
                     if "stance" in match:
                         sent_data["stance"] = dict(match["stance"])
                     sentences_data[comment_id]["sentences"][sent_id_in_comment] = sent_data.copy()
@@ -564,13 +564,13 @@ class KpaResult:
         if set(server_stances) == set(["neg", "sug"]):
             return "con"
 
-        raise KpaIllegalInputException(f'Unsupported stances {server_stances}')
+        raise KpsIllegalInputException(f'Unsupported stances {server_stances}')
 
     def get_result_with_top_kp_per_sentence(self):
         """
-        Return the same KpaResult with up to one matching key point per sentence (the key point with the highest matching score).
+        Return the same KpsResult with up to one matching key point per sentence (the key point with the highest matching score).
         No hierarchy is generated in this settings.
-        :return: new KpaResult after choosing the top kp for each sentence.
+        :return: new KpsResult after choosing the top kp for each sentence.
         """
         new_results_df = self.result_df.sort_values(by=["sentence_text","match_score"], ascending=[True, False])
         top_preds_df = pd.concat([group.head(1) for _,group in new_results_df.groupby(by="sentence_text")])
@@ -593,4 +593,4 @@ class KpaResult:
         new_json = {"sentences_data": self.result_json["sentences_data"].copy(), "version": self.result_json["version"],
                     "job_metadata":new_meta_data, "keypoint_matchings":new_keypoint_matchings}
 
-        return KpaResult.create_from_result_json(new_json)
+        return KpsResult.create_from_result_json(new_json)

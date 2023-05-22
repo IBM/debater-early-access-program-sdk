@@ -2,19 +2,11 @@ import json
 import logging
 import pandas as pd
 import numpy as np
-from debater_python_api.api.clients.key_point_analysis.utils import create_dict_to_list, read_dicts_from_df, \
+from debater_python_api.api.clients.key_point_summarization.utils import create_dict_to_list, read_dicts_from_df, \
     get_unique_sent_id
 
 
 def create_graph_data(full_results_df, n_sentences, min_n_similar_matches=5, n_matches_samples=20):
-    '''
-    translates the result file (full result, not the summary) into a json that is loadable in the kpa-key-points-graph-ui
-    :param kpa_result: a KpaResult instance
-    :param min_n_similar_matches: minimal number of sentences in the key points intersection for creating an edge (relation between the key points).
-    :paran n_matches_samples: maximal number of matching sentences to include for each key point
-    :return: a json object with the graph data.
-    '''
-
     def graph_to_graph_data(graph, n_sentences):
         for node in graph['nodes']:
             node['relative_val'] = float(node['n_matches']) / float(n_sentences)
