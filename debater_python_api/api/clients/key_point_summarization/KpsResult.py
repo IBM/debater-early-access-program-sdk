@@ -156,28 +156,18 @@ class KpsResult:
 
         kp_to_id = {self.kp_id_to_hierarchical_data[id]["kp"]:id for id in self.kp_id_to_hierarchical_data }
         dicts, _ = read_dicts_from_df(self.result_df)
+        dicts = list(filter(lambda d: d["kp"]!= "none", dicts))
 
         kp_to_dicts = create_dict_to_list([(d['kp'], d) for d in dicts])
 
         general_metadata = self.result_json["job_metadata"]["general"]
         n_total_sentences = general_metadata["n_sentences"]
-        all_mapped_sentences = set([get_unique_sent_id(d) for d in dicts if d['kp'] != 'none'])
-        n_unmapped_sentences = n_total_sentences - len(all_mapped_sentences)
-
         n_total_comments = general_metadata["n_comments"]
-        all_mapped_comment_ids = set([d["comment_id"] for d in dicts if d['kp'] != 'none'])
-        n_unmapped_comments = n_total_comments - len(all_mapped_comment_ids)
 
         summary_rows = []
         summary_cols = ["kp", '#comments', 'comments_coverage', "#sentences", 'sentences_coverage', "kp_id","parent_id", "n_comments_subtree","stance"]
 
-        none_row = ["none", n_unmapped_comments, n_unmapped_comments/n_total_comments, n_unmapped_sentences, n_unmapped_sentences/n_total_sentences,
-                    "", "","", ""]
-        summary_rows.append(none_row)
-
         for kp, kp_dicts in kp_to_dicts.items():
-            if kp == "none":
-                continue
 
             n_sentences = len(kp_dicts)
             sentence_coverage = n_sentences / n_total_sentences if n_total_sentences > 0 else 0.0
@@ -195,17 +185,37 @@ class KpsResult:
             summary_rows.append(summary_row)
 
         summary_rows = sorted(summary_rows, key=lambda x: x[summary_cols.index("#comments")], reverse=True)
+
         for stance in self.stances:
+            if stance == "no-stance":
+                continue
             stance_data = self.result_json["job_metadata"]["per_stance"][stance]
             stance_n_comments = stance_data["n_comments_stance"]
             stance_comment_coverage = stance_n_comments/n_total_comments
             stance_n_sentences = stance_data["n_sentences_stance"]
             stance_sentence_coverage = stance_n_sentences / n_total_sentences
-            stance_row = [stance, stance_n_comments, stance_comment_coverage, stance_n_sentences, stance_sentence_coverage,
-                          "","","",stance]
+
+            stance_row = ["*total_"+stance, stance_n_comments, stance_comment_coverage, stance_n_sentences, stance_sentence_coverage,
+                          "","","",""]
             summary_rows.append(stance_row)
-        total_row = ["total",n_total_comments, 1, n_total_sentences, 1, "","","",""]
+
+            stance_dicts = list(filter(lambda d:d["kp_stance"] == stance, dicts))
+            stance_n_mapped_comments =  len(set([d["comment_id"] for d in stance_dicts]))
+            stance_n_mapped_sentences = len(set([get_unique_sent_id(d) for d in stance_dicts]))
+            stance_mapped_comment_coverage = stance_n_mapped_comments / n_total_comments
+            stance_mapped_sentence_coverage = stance_n_mapped_sentences / n_total_sentences
+            stance_mapped_row = ["*matched_" + stance, stance_n_mapped_comments, stance_mapped_comment_coverage, stance_n_mapped_sentences,
+                          stance_mapped_sentence_coverage, "", "", "", ""]
+            summary_rows.append(stance_mapped_row)
+
+        total_row = ["*total_",n_total_comments, 1, n_total_sentences, 1, "","","",""]
         summary_rows.append(total_row)
+
+        n_mapped_sentences = len(set([get_unique_sent_id(d) for d in dicts]))
+        n_mapped_comments =  len(set([d["comment_id"] for d in dicts]))
+        total_mapped_row = ["*matched_", n_mapped_comments, n_mapped_comments / n_total_comments, n_mapped_sentences,
+                    n_mapped_sentences / n_total_sentences, "", "","", ""]
+        summary_rows.append(total_mapped_row)
 
         return pd.DataFrame(summary_rows, columns=summary_cols)
 
