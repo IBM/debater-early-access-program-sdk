@@ -238,6 +238,10 @@ class KpsResult:
                 logging.error("Could not create KpsResults from json.")
                 raise e
 
+    def get_job_metadata(self):
+        """ Return the metadata associated with the (or jobs in case of merged results)"""
+        return self.result_json['job_metadata']
+
     @staticmethod
     def _convert_to_new_version(result_json, old_version, new_version):
         if old_version == "1.0" and new_version == "2.0":
