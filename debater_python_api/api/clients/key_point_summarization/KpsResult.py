@@ -386,8 +386,14 @@ class KpsResult:
 
         n_total_sentences = self._get_number_of_unique_sentences(include_unmatched=True)
         n_matched_sentences = self._get_number_of_unique_sentences(include_unmatched=False)
+        per_stance_data = self.result_json["job_metadata"]["per_stance"]
+        n_sentences_with_stance = np.sum([stance_data["n_sentences_stance"] for stance_data in per_stance_data.values()])
+        print(title + ' coverage (all sentences): %.2f' % (float(n_matched_sentences) / float(n_total_sentences) * 100.0))
 
-        print(title + ' coverage: %.2f' % (float(n_matched_sentences) / float(n_total_sentences) * 100.0))
+        stance_str = self.get_stance_str()
+        if stance_str != "no-stance":
+            print(
+            title + f' coverage (of {stance_str} sentences): %.2f' % (float(n_matched_sentences) / float(n_sentences_with_stance) * 100.0))
         print(title + ' key points:')
         n_top_kps = n_top_kps if n_top_kps else len(keypoint_matchings)
         for keypoint_matching in keypoint_matchings[:n_top_kps]:
@@ -604,3 +610,10 @@ class KpsResult:
                     "job_metadata":new_meta_data, "keypoint_matchings":new_keypoint_matchings}
 
         return KpsResult.create_from_result_json(new_json)
+
+    def get_stance_str(self):
+        if len(self.stances) == 0:
+            return "no-stance"
+        elif len(self.stances) == 1:
+            return list(self.stances)[0]
+        return "pro and con"
