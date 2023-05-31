@@ -129,7 +129,8 @@ class KpSummarizationClient():
         Processing comments (cleaning + sentence splitting + calculating scores) takes some time. The progress will
         be displayed on screen and the method will return only when all comments are processed.
         :param domain: the name of the domain to upload the comments into. (usually one  per data-set).
-        :param comments_ids: a list of comment ids (strings), comment ids must be unique.
+        :param comments_ids: a list of comment ids (strings), comment ids must be unique, and composed of alphanumeric characters,
+        spaces and underscores only.
         :param comments_texts: a list of comments (strings), this list must be the same length as comments_ids and the comment_id and comment_text should match by position in the list.
         """
         self.upload_comments_async(domain, comments_ids, comments_texts)
@@ -227,7 +228,7 @@ class KpSummarizationClient():
         return run_params
 
     def run_full_kps_flow(self, domain: str, comments_texts: List[str],
-                          stance: Optional[str] = Stance.NO_STANCE.value):
+                          stance: Optional[str] = Stance.EACH_STANCE.value):
         '''
         This is the simplest way to use the Key Point Summarization system.
         This method uploads the comments into a temporary domain, waits for them to be processed,
@@ -237,7 +238,7 @@ class KpSummarizationClient():
         If execution stopped before this method returned, please run client.delete_domain_cannot_be_undone(<domain>)
         to free resources and avoid longer waiting in future calls.  TODO Remove comment?
         :param domain: name of the temporary domain to store the comments. must not be a name of an existing domain, or
-        an error will be raised
+        an error will be raised. The domain must be composed of alphanumeric characters, spaces and underscores only.
         :param comments_texts: a list of comments (strings).
         :param stance: Optional, If "no-stance" - run on all the data disregarding the stance.
         If "pro", run on positive sentences only, if "con", run on con sentences (negative and suggestions).
@@ -259,7 +260,7 @@ class KpSummarizationClient():
         except KpsIllegalInputException as e:
             if 'already exist' in str(e):
                 raise KpsIllegalInputException(f'Domain {domain} already exists. Please use a new domain name or delete the domain using '
-                                               f'delete_domain_cant_be_undone() to run the full flow. If you wish to run kps on the existing domain, please'
+                                               f'delete_domain_cannot_be_undone() to run the full flow. If you wish to run kps on the existing domain, please'
                                                f'use the methods run_kps_job or run_kps_job_both_stances')
             else:
                 raise e
