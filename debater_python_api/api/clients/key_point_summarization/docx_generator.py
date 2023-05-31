@@ -236,8 +236,7 @@ def save_hierarchical_graph_data_to_docx(full_result_df, kp_id_to_data, result_f
         if n_matches is not None and n_matches < len(kp_to_dicts[kp]):
             matches_dicts = sample_list_keep_order(matches_dicts, n_matches, seed=seed)
 
-
-        logging.info(f'creating table for KP: {kp}, {stance_str}matching sentences: {len(matches_dicts)}')
+        #logging.info(f'creating table for KP: {kp}, {stance_str}, matching sentences: {len(matches_dicts)}')
 
         records = []
         for d in matches_dicts:

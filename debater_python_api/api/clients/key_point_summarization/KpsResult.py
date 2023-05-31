@@ -165,7 +165,7 @@ class KpsResult:
         n_total_comments = general_metadata["n_comments"]
 
         summary_rows = []
-        summary_cols = ["kp", '#comments', 'comments_coverage', "#sentences", 'sentences_coverage', "kp_id","parent_id", "n_comments_subtree","stance"]
+        summary_cols = ["key_point", '#comments', 'comments_coverage', "#sentences", 'sentences_coverage', "stance","kp_id","parent_id", "n_comments_subtree"]
 
         for kp, kp_dicts in kp_to_dicts.items():
 
@@ -180,8 +180,8 @@ class KpsResult:
             n_comments_in_subtree = kp_to_data['n_matching_comments_in_subtree']
             kp_stance = kp_to_data.get('kp_stance', "")
 
-            summary_row = [kp, n_comments, comments_coverage, n_sentences, sentence_coverage,
-                           kp_id, parent, n_comments_in_subtree, kp_stance]
+            summary_row = [kp, n_comments, comments_coverage, n_sentences, sentence_coverage, kp_stance,
+                           kp_id, parent, n_comments_in_subtree]
             summary_rows.append(summary_row)
 
         summary_rows = sorted(summary_rows, key=lambda x: x[summary_cols.index("#comments")], reverse=True)
@@ -208,12 +208,12 @@ class KpsResult:
                           stance_mapped_sentence_coverage, "", "", "", ""]
             summary_rows.append(stance_mapped_row)
 
-        total_row = ["*total_",n_total_comments, 1, n_total_sentences, 1, "","","",""]
+        total_row = ["*total",n_total_comments, 1, n_total_sentences, 1, "","","",""]
         summary_rows.append(total_row)
 
         n_mapped_sentences = len(set([get_unique_sent_id(d) for d in dicts]))
         n_mapped_comments =  len(set([d["comment_id"] for d in dicts]))
-        total_mapped_row = ["*matched_", n_mapped_comments, n_mapped_comments / n_total_comments, n_mapped_sentences,
+        total_mapped_row = ["*matched", n_mapped_comments, n_mapped_comments / n_total_comments, n_mapped_sentences,
                     n_mapped_sentences / n_total_sentences, "", "","", ""]
         summary_rows.append(total_mapped_row)
 
