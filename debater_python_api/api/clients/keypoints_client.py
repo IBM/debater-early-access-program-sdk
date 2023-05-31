@@ -463,7 +463,11 @@ class KpSummarizationClient():
         :param job_id: when provided, it will only return the sentences used in a specific key point summarization job.
         :return: a dataframe with all the sentences' data.
         '''
-        res = self._get(self.host + data_endpoint, {'domain': domain, 'get_sentences': True, 'job_id': job_id})
+        params = {'domain': domain, 'get_sentences': True}
+        if job_id:
+            params['job_id'] = job_id
+
+        res = self._get(self.host + data_endpoint, params=params)
         logging.info(res['msg'])
         sentences = res['sentences_results']
         if len(sentences) == 0:
