@@ -424,7 +424,7 @@ class KpsResult:
                     total_sentences = total_sentences.union(matching_sents_ids)
             return len(total_sentences)
 
-    def compare_with_comment_subsets(self, comments_subsets_dict):
+    def compare_with_comment_subsets(self, comments_subsets_dict, include_full = True):
         """
         Compare the full result with the results generated from comment subsets. This is useful in order to compare the
         key points' prevalence among different subsets of the full data.
@@ -433,12 +433,12 @@ class KpsResult:
         :return: a dataframe containing the number and percentage of the comments matched to each key point in the full result and
         in each comments' subset, and the change percentage if comparing to a single subset.
         """
-        results_to_total_comments = {"full": self._get_number_of_unique_comments()}
+        results_to_total_comments = {"full": self._get_number_of_unique_comments()} if include_full else {}
         results_to_total_comments.update({title: len(comments_subsets_dict[title]) for title in comments_subsets_dict})
 
-        titles = ["full"] + sorted(comments_subsets_dict.keys(), key=lambda x: results_to_total_comments[x], reverse=True)
+        titles = (["full"] if include_full else []) + sorted(comments_subsets_dict.keys(), key=lambda x: results_to_total_comments[x], reverse=True)
 
-        results_to_kp_to_n_comments = {"full": self._get_kp_to_n_matched_comments()}
+        results_to_kp_to_n_comments = {"full": self._get_kp_to_n_matched_comments()} if include_full else {}
         results_to_kp_to_n_comments.update(
             {title: self._get_kp_to_n_matched_comments(comments_subset=comment_ids) for title, comment_ids in comments_subsets_dict.items()})
         return _get_comparison_df(results_to_kp_to_n_comments, results_to_total_comments, titles)
