@@ -193,7 +193,7 @@ class KpSummarizationClient():
         :param domain: the name of the domain
         :return: True if all comments uploaded to the domain are processed.
         """
-        res = self._get(self.host + comments_endpoint, {'domain': domain})
+        res = self.get_comments_status(domain)
         return res['pending_comments'] == 0
 
     def wait_till_all_comments_are_processed(self, domain: str, polling_timeout_secs: Optional[int] = None) -> None:
@@ -540,6 +540,11 @@ class KpSummarizationClient():
 
             for kp_summarization_status in kp_summarization_statuses:
                 logging.info(f'    Job: {str(kp_summarization_status)}')
+
+    def get_results_from_job_id(self, job_id:str):
+        kps_future = KpSummarizationTaskFuture(self, job_id)
+        kps_result = kps_future.get_result()
+        return kps_result
 
     @staticmethod
     def _validate_params_dict(params_dict, params_type:str):
