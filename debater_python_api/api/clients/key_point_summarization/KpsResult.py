@@ -3,6 +3,7 @@ import json
 import logging
 import math
 from collections import defaultdict
+from typing import Optional, Dict, List
 
 import pandas as pd
 import numpy as np
@@ -84,7 +85,7 @@ class KpsResult:
         per_stance_metadata = self.result_json["job_metadata"]["per_stance"]
         return {k: per_stance_metadata[k]["job_id"] for k in per_stance_metadata}
 
-    def save(self, json_file):
+    def save(self, json_file: str):
         """
         Save to current results as a json file
         :param json_file: path to the json file to hold the results
@@ -94,7 +95,7 @@ class KpsResult:
             json.dump(self.result_json, f)
 
     @staticmethod
-    def load(json_file):
+    def load(json_file: str):
         """
         Load results from a json file
         :param json_file: the file to load the results from, obtained using the save() method.
@@ -251,10 +252,10 @@ class KpsResult:
         raise KpsIllegalInputException(f"Unsupported results version old: {old_version}, new: {new_version}. "
                                        f"Supported: old = 1.0, new = 2.0")
 
-    def generate_docx_report(self, output_dir, result_name,
-                             n_matches_in_docx=50,
-                             include_match_score_in_docx=False,
-                             min_n_matches_in_docx=5,
+    def generate_docx_report(self, output_dir: str, result_name: str,
+                             n_matches_in_docx: Optional[int] = 50,
+                             include_match_score_in_docx: Optional[bool] = False,
+                             min_n_matches_in_docx: Optional[int] = 5,
                              kp_id_to_hierarchical_data=None):
         """
         creates <output_dir>/<result_name>_hierarchical.docx: This Microsoft Word document shows the key point hierarchy and matching sentences
@@ -309,10 +310,10 @@ class KpsResult:
                             min_n_matches_in_docx=min_n_matches_in_docx,
                             kp_id_to_hierarchical_data = new_kp_id_to_hierarchical_data)
 
-    def export_to_all_outputs(self, output_dir, result_name,
-                              n_matches_in_docx=50,
-                              include_match_score_in_docx=False,
-                              min_n_matches_in_docx=5
+    def export_to_all_outputs(self, output_dir: str, result_name: str,
+                              n_matches_in_docx: Optional[int] = 50,
+                              include_match_score_in_docx: Optional[bool] = False,
+                              min_n_matches_in_docx: Optional[int] = 5,
                               ):
         """
         Generates all the kps available output types.
@@ -339,7 +340,7 @@ class KpsResult:
                                   include_match_score_in_docx=include_match_score_in_docx,
                                   min_n_matches_in_docx=min_n_matches_in_docx)
 
-    def print_result(self, n_sentences_per_kp, title, n_top_kps = None):
+    def print_result(self, n_sentences_per_kp: int, title: str, n_top_kps:Optional[int]=None):
         '''
         Prints the key point summarization result to console.
         :param n_sentences_per_kp: number of top matched sentences to display for each key point
@@ -424,12 +425,13 @@ class KpsResult:
                     total_sentences = total_sentences.union(matching_sents_ids)
             return len(total_sentences)
 
-    def compare_with_comment_subsets(self, comments_subsets_dict, include_full = True):
+    def compare_with_comment_subsets(self, comments_subsets_dict:Dict[str, List[str]], include_full:Optional[bool] = True):
         """
         Compare the full result with the results generated from comment subsets. This is useful in order to compare the
         key points' prevalence among different subsets of the full data.
         :param comments_subsets_dict: dictionary of string titles as keys and the set of comment ids that corresponds to each title.
         Comment ids that are not part of this result are ignored.
+        :param include_full: Optional, default True, whether to include the full results in the comparison.
         :return: a dataframe containing the number and percentage of the comments matched to each key point in the full result and
         in each comments' subset, and the change percentage if comparing to a single subset.
         """
@@ -443,7 +445,7 @@ class KpsResult:
             {title: self._get_kp_to_n_matched_comments(comments_subset=comment_ids) for title, comment_ids in comments_subsets_dict.items()})
         return _get_comparison_df(results_to_kp_to_n_comments, results_to_total_comments, titles)
 
-    def compare_with_other_results(self, this_title, other_results_dict):
+    def compare_with_other_results(self, this_title : str, other_results_dict : Dict[str,'KpsResult']):
         """
         Compare this result with other results.
         :param this_title: title to be associated with the current result.
@@ -460,7 +462,7 @@ class KpsResult:
         return _get_comparison_df(results_to_kp_to_n_comments, results_to_total_comments, titles)
 
     @staticmethod
-    def get_merged_pro_con_results(pro_result, con_result):
+    def get_merged_pro_con_results(pro_result: 'KpsResult', con_result: 'KpsResult'):
         """
         Merge a pro KpsResult and a con KpsResult to a single merged KpsResult.
         The two results must be obtained by the same user, over the same domain and the same set of comments.
@@ -595,7 +597,7 @@ class KpsResult:
     def get_result_with_top_kp_per_sentence(self):
         """
         Return the same KpsResult with up to one matching key point per sentence (the key point with the highest matching score).
-        No hierarchy is generated in this settings.
+        No hierarchy is generated in this setting.
         :return: new KpsResult after choosing the top kp for each sentence.
         """
         new_results_df = self.result_df.sort_values(by=["sentence_text","match_score"], ascending=[True, False])
