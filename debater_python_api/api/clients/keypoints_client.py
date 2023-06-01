@@ -269,24 +269,37 @@ class KpsClient():
 
     def run_kps_job_both_stances(self, domain: str, comments_ids: Optional[List[str]]=None,
                                  run_params_pro:Optional[Dict[str, Any]] = None,
-                                 run_params_con:Optional[Dict[str, Any]] = None):
-        future_pro = self.run_kps_job_async(domain, comments_ids, stance=Stance.PRO.value, run_params=run_params_pro)
-        future_con = self.run_kps_job_async(domain, comments_ids, stance=Stance.CON.value, run_params=run_params_con)
+                                 run_params_con:Optional[Dict[str, Any]] = None,
+                                 description: Optional[str] = None):
+        """
+        Starts two kps jobs simultaneously, one for pro sentences and one for con sentences, and returns a merge KpsResult.
+        :param domain: the name of the domain
+        :param comments_ids: optional, when None is passed, it uses all comments in the domain (typical usage) otherwise it only uses the comments according to the provided list of comments_ids.
+        :param run_params_pro: optional,a dictionary with different parameters and their values, to be sent to the pro kps job.
+        :param run_params_con: optional,a dictionary with different parameters and their values, to be sent to the con kps job.
+        For full documentation of supported run_params see https://github.com/IBM/debater-eap-tutorial/blob/main/survey_usecase/kpa_parameters.pdf
+        :param description: optional, add a description to a job so it will be easy to detect it in the user-report. for each job, the stance will be appended to the description.,
+        the stance of each job will be added to the description
+        :return: a KpsResult object with the merged pro and con result.
+        """
+        description_pro = (description + " (pro)") if description else None
+        description_con = (description + " (con)") if description else None
+        future_pro = self.run_kps_job_async(domain, comments_ids, stance=Stance.PRO.value, run_params=run_params_pro, description = description_pro)
+        future_con = self.run_kps_job_async(domain, comments_ids, stance=Stance.CON.value, run_params=run_params_con, description = description_con)
         result_pro = future_pro.get_result()
         result_con = future_con.get_result()
         return KpsResult.get_merged_pro_con_results(pro_result=result_pro, con_result=result_con)
 
     def run_kps_job(self, domain: str, comments_ids: Optional[List[str]]=None,
                     run_params: Optional[Dict[str, Any]] = None,
-                    description: Optional[str]=None, stance: Optional[Stance]=Stance.NO_STANCE.value) -> 'KpsResult':
+                    description: Optional[str] = None, stance: Optional[Stance]=Stance.NO_STANCE.value) -> 'KpsResult':
         """
         Runs Key Point Summarization (KPS) in a synchronous manner: starts the job, waits for the results and return them.
         Please make sure all comments had already been uploaded into a domain and processed before starting a new job (using the get_comments_status or are_all_comments_processed methods).
         :param domain: the name of the domain
         :param comments_ids: optional, when None is passed, it uses all comments in the domain (typical usage) otherwise it only uses the comments according to the provided list of comments_ids.
         :param run_params: optional,a dictionary with different parameters and their values. For full documentation of supported run_params see https://github.com/IBM/debater-eap-tutorial/blob/main/survey_usecase/kpa_parameters.pdf
-        :param description: optional, add a description to a job so it will be easy to detect it in the user-report. if stance=="each-stance",
-        the stance of each job will be added to the description
+        :param description: optional, add a description to a job so it will be easy to detect it in the user-report.
         :param stance: Optional, default to "no-stance". If "no-stance" - run on all the data disregarding the stance.
         If "pro", run on positive sentences only, if "con", run on con sentences (negative and suggestions).
         :return: a KpsResult object with the result.
@@ -296,8 +309,8 @@ class KpsClient():
         return keypoint_matching
 
     def run_kps_job_async(self, domain: str, comments_ids: Optional[List[str]]=None,
-                          stance:Optional[Stance]=Stance.NO_STANCE.value,
-                          run_params:Optional[Dict[str, Any]] = None, description: Optional[str]=None) -> 'KpsJobFuture':
+                          stance:Optional[Stance] = Stance.NO_STANCE.value,
+                          run_params:Optional[Dict[str, Any]] = None, description: Optional[str] = None) -> 'KpsJobFuture':
         """
         Starts a Key Point Summarization (KPS) job in an async manner. Please make sure all comments had already been
         uploaded into a domain and processed before starting a new job (using the using get_comments_status or are_all_comments_processed methods).
