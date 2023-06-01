@@ -5,7 +5,7 @@ import unittest
 
 from hamcrest import assert_that
 
-from debater_python_api.api.clients.keypoints_client import KpSummarizationClient
+from debater_python_api.api.clients.keypoints_client import KpsClient
 from debater_python_api.api.clients.narrative_generation_client import Polarity
 from debater_python_api.api.sentence_level_index.client.sentence_query_base import SimpleQuery
 from debater_python_api.api.sentence_level_index.client.sentence_query_request import SentenceQueryRequest
@@ -204,7 +204,7 @@ class ServicesIT(unittest.TestCase):
                 'Cannabis can be very harmful and addictive, especially for young people',
                 'Cannabis is very addictive.'
         ]
-        KpSummarizationClient.init_logger()
+        KpsClient.init_logger()
         keypoints_client = self.debater_api.get_keypoints_client()
         keypoint_matchings_res = keypoints_client.run_full_kps_flow("serviceit_test" ,comments_texts)
         keypoint_matchings_res.print_result(n_sentences_per_kp=10, title="KPS Result")

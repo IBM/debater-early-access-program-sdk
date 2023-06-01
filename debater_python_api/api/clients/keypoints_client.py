@@ -30,7 +30,7 @@ class Stance(Enum):
     NO_STANCE = "no-stance"
     EACH_STANCE = "each-stance"
 
-class KpSummarizationClient():
+class KpsClient():
     '''
     A client for the Key Point Summarization (KPS) service.
     '''
@@ -61,7 +61,7 @@ class KpSummarizationClient():
         if headers_input is not None:
             headers.update(headers_input)
 
-        KpSummarizationClient._validate_request(params)
+        KpsClient._validate_request(params)
         params["api_version"] = self.api_version
         logging.info('client calls service (%s): %s' % (func.__name__, url))
         while True:
@@ -107,7 +107,7 @@ class KpSummarizationClient():
         try:
             body = {'domain': domain}
             if domain_params is not None:
-                KpSummarizationClient._validate_params_dict(domain_params, "domain")
+                KpsClient._validate_params_dict(domain_params, "domain")
                 body['domain_params'] = domain_params
             self._post(url=self.host + domains_endpoint, body=body)
             logging.info('created domain: %s with domain_params: %s' % (domain, str(domain_params)))
@@ -295,7 +295,7 @@ class KpSummarizationClient():
 
     def run_kps_job_async(self, domain: str, comments_ids: Optional[List[str]]=None,
                           stance:Optional[Stance]=Stance.NO_STANCE.value,
-                          run_params=None, description: Optional[str]=None) -> 'KpSummarizationTaskFuture':
+                          run_params=None, description: Optional[str]=None) -> 'KpsJobFuture':
         """
         Starts a Key Point Summarization (KPS) job in an async manner. Please make sure all comments had already been
         uploaded into a domain and processed before starting a new job (using the using get_comments_status or are_all_comments_processed methods).
@@ -305,14 +305,14 @@ class KpSummarizationClient():
         :param stance: Optional, default to "no-stance". If "no-stance" - run on all the data disregarding the stance.
         If "pro", run on positive sentences only, if "con", run on con sentences (negative and suggestions).
         :param description: optional, add a description to a job so it will be easy to detect it in the user-report.
-        :return: KpSummarizationTaskFuture: an object that enables the retrieval of the results in an async manner
+        :return: KpsJobFuture: an object that enables the retrieval of the results in an async manner
         """
         if not self.are_all_comments_processed(domain):
             raise KpsInvalidOperationException(f"Attempt to start a KPS job on domain {domain} when comments"
                                                f" are still processing. Please wait until all comments are processed"
                                                f" before starting a kps job. You can test the comments status using the"
                                                f"methods are_all_comments_processed({domain}) or get_comments_status({domain})")
-        run_params = KpSummarizationClient._get_run_params_with_stance(run_params, stance)
+        run_params = KpsClient._get_run_params_with_stance(run_params, stance)
         body = {'domain': domain}
 
         if comments_ids is not None:
@@ -320,7 +320,7 @@ class KpSummarizationClient():
             body['comments_ids'] = comments_ids
 
         if run_params is not None:
-            KpSummarizationClient._validate_params_dict(run_params, 'run')
+            KpsClient._validate_params_dict(run_params, 'run')
             body['run_params'] = run_params
 
         if description is not None:
@@ -328,7 +328,7 @@ class KpSummarizationClient():
 
         res = self._post(url=self.host + kp_extraction_endpoint, body=body)
         logging.info(f'started a kp summarization job - domain: {domain}, stance: {stance}, run_params: {run_params}, {"" if description is None else f"description: {description}, "}job_id: {res["job_id"]}')
-        return KpSummarizationTaskFuture(self, res['job_id'])
+        return KpsJobFuture(self, res['job_id'])
 
     def get_kps_job_status(self, job_id: str, top_k_kps: Optional[int] = None,
                                      top_k_sentences_per_kp: Optional[int] = None):
@@ -542,8 +542,8 @@ class KpSummarizationClient():
                 logging.info(f'    Job: {str(kp_summarization_status)}')
 
     def get_results_from_job_id(self, job_id:str):
-        kps_future = KpSummarizationTaskFuture(self, job_id)
-        kps_result = kps_future.get_result()
+        kps_future = KpsJobFuture(self, job_id)
+        kps_result = kps_future.get_result(high_verbosity=True)
         return kps_result
 
     @staticmethod
@@ -571,15 +571,15 @@ class KpSummarizationClient():
 
 
 
-class KpSummarizationTaskFuture:
+class KpsJobFuture:
     '''
     A future for an async key point summarization job. Wraps the job_id and uses a provided client for retrieving the job's result.
     Usually created when starting a key point summarization job but can also be created by a user, by suppling the client and the job_id.
     The job_id can be retrieved from the console (it is printed to console when a job is started) or from the user-report.
     '''
-    def __init__(self, client: KpSummarizationClient, job_id: str):
+    def __init__(self, client: KpsClient, job_id: str):
         '''
-        Create a KpSummarizationTaskFuture over a job_id for results retrieval.
+        Create a KpsJobFuture over a job_id for results retrieval.
         :param client: a client for communicating with the service.
         :param job_id: the job_id. The job_id can be retrieved from the console (it is printed to console when a job is started) or from the user-report.
         '''
