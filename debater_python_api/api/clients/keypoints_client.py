@@ -12,7 +12,7 @@ from debater_python_api.api.clients.key_point_summarization.KpsResult import Kps
 from debater_python_api.api.clients.key_point_summarization.utils import get_default_request_header, \
     update_row_with_stance_data, validate_api_key_or_throw_exception, print_progress_bar, is_list_of_strings
 
-from typing import List, Optional, Dict, Union
+from typing import List, Optional, Dict, Union, Any
 from debater_python_api.api.clients.key_point_summarization.KpsExceptions import KpsIllegalInputException, \
     KpsNoPrivilegesException, KpsInvalidOperationException
 
@@ -267,15 +267,17 @@ class KpsClient():
         finally:
             self.delete_domain_cannot_be_undone(domain)
 
-    def run_kps_job_both_stances(self, domain: str, comments_ids: Optional[List[str]]=None):
-        future_pro = self.run_kps_job_async(domain, comments_ids, stance=Stance.PRO.value)
-        future_con = self.run_kps_job_async(domain, comments_ids, stance=Stance.CON.value)
+    def run_kps_job_both_stances(self, domain: str, comments_ids: Optional[List[str]]=None,
+                                 run_params_pro:Optional[Dict[str, Any]] = None,
+                                 run_params_con:Optional[Dict[str, Any]] = None):
+        future_pro = self.run_kps_job_async(domain, comments_ids, stance=Stance.PRO.value, run_params=run_params_pro)
+        future_con = self.run_kps_job_async(domain, comments_ids, stance=Stance.CON.value, run_params=run_params_con)
         result_pro = future_pro.get_result()
         result_con = future_con.get_result()
         return KpsResult.get_merged_pro_con_results(pro_result=result_pro, con_result=result_con)
 
     def run_kps_job(self, domain: str, comments_ids: Optional[List[str]]=None,
-                    run_params: Optional[Dict[str, Union[int, str, List[str], bool, float]]] = None,
+                    run_params: Optional[Dict[str, Any]] = None,
                     description: Optional[str]=None, stance: Optional[Stance]=Stance.NO_STANCE.value) -> 'KpsResult':
         """
         Runs Key Point Summarization (KPS) in a synchronous manner: starts the job, waits for the results and return them.
@@ -295,7 +297,7 @@ class KpsClient():
 
     def run_kps_job_async(self, domain: str, comments_ids: Optional[List[str]]=None,
                           stance:Optional[Stance]=Stance.NO_STANCE.value,
-                          run_params=None, description: Optional[str]=None) -> 'KpsJobFuture':
+                          run_params:Optional[Dict[str, Any]] = None, description: Optional[str]=None) -> 'KpsJobFuture':
         """
         Starts a Key Point Summarization (KPS) job in an async manner. Please make sure all comments had already been
         uploaded into a domain and processed before starting a new job (using the using get_comments_status or are_all_comments_processed methods).
