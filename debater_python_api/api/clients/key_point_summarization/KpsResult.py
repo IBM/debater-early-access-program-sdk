@@ -389,8 +389,6 @@ class KpsResult:
         keypoint_matchings = self.result_json["keypoint_matchings"]
         sentences_data = self.result_json["sentences_data"]
 
-        n_total_sentences = self._get_number_of_unique_sentences(include_unmatched=True)
-        n_matched_sentences = self._get_number_of_unique_sentences(include_unmatched=False)
         n_total_comments = self._get_number_of_unique_comments(include_unmatched=True)
         n_matched_comments = self._get_number_of_unique_comments(include_unmatched=False)
 
@@ -407,8 +405,15 @@ class KpsResult:
                 cov_from_stance = float(n_matched_comments) / float(n_comments_with_stance) * 100.0
             print(f'Coverage ({stance_str} comments): %.2f' % cov_from_stance)
 
-        print(title + ' key points:')
-        n_top_kps = n_top_kps if n_top_kps else len(keypoint_matchings)
+        total_n_kps = len(keypoint_matchings)
+        kps_have_none = "none" in [keypoint_matching['keypoint'] for keypoint_matching in keypoint_matchings]
+        if kps_have_none:
+            total_n_kps -= 1
+
+        n_top_kps = n_top_kps if n_top_kps else total_n_kps
+        n_displayed_kps = np.min([n_top_kps,total_n_kps])
+        print(f'Displaying {n_displayed_kps} key points out of {total_n_kps}:')
+
         for keypoint_matching in keypoint_matchings[:n_top_kps]:
             kp = keypoint_matching['keypoint']
             stance = None if 'stance' not in keypoint_matching else keypoint_matching['stance']
