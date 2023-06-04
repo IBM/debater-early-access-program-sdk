@@ -391,19 +391,21 @@ class KpsResult:
 
         n_total_sentences = self._get_number_of_unique_sentences(include_unmatched=True)
         n_matched_sentences = self._get_number_of_unique_sentences(include_unmatched=False)
+        n_total_comments = self._get_number_of_unique_comments(include_unmatched=True)
+        n_matched_comments = self._get_number_of_unique_comments(include_unmatched=False)
 
-        if self.stances:
-            per_stance_data = self.result_json["job_metadata"]["per_stance"]
-            n_sentences_with_stance = np.sum(
-                [stance_data["n_sentences_stance"] for stance_data in per_stance_data.values()])
-            stance_str = self.get_stance_str()
-            print(title + ' coverage (all sentences): %.2f' % (
-                        float(n_matched_sentences) / float(n_total_sentences) * 100.0))
-            print(
-            title + f' coverage (of {stance_str} sentences): %.2f' % (float(n_matched_sentences) / float(n_sentences_with_stance) * 100.0))
-        else:
-            print(title + ' coverage: %.2f' % (
-                    float(n_matched_sentences) / float(n_total_sentences) * 100.0))
+        stance_str = self.get_stance_str()
+        print(f'{title} results, stance: {stance_str} ')
+        print('Coverage (all comments): %.2f' % (
+                float(n_matched_comments) / float(n_total_comments) * 100.0))
+
+        if len(self.stances) == 1:
+            n_comments_with_stance = self.result_json["job_metadata"]["per_stance"][list(self.stances)[0]]["n_comments_stance"]
+            if n_comments_with_stance == 0:
+                cov_from_stance = np.NAN
+            else:
+                cov_from_stance = float(n_matched_comments) / float(n_comments_with_stance) * 100.0
+            print(f'Coverage ({stance_str} comments): %.2f' % cov_from_stance)
 
         print(title + ' key points:')
         n_top_kps = n_top_kps if n_top_kps else len(keypoint_matchings)
