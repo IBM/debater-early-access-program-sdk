@@ -342,7 +342,8 @@ class KpsResult:
 
     def print_result(self, n_sentences_per_kp: int, title: str, n_top_kps:Optional[int]=None):
         '''
-        Prints the key point summarization result to console.
+        Prints the key point summarization result to console. For each kp, display the number of matched comments, stance
+        and top matching sentences.
         :param n_sentences_per_kp: number of top matched sentences to display for each key point
         :param title: title to print for the summarization
         :param n_top_kps: Optional, maximal number of kps to display.
@@ -373,14 +374,16 @@ class KpsResult:
                 lines.extend(split_sentence_to_lines(sentence))
             return [('\t' * n_tabs) + line for line in lines]
 
-        def print_kp(kp, stance, keypoint_matching, sentences_data, n_sentences_per_kp): #TODO!!! N_MATCHES INCLUDES KP ITSELF, PRINTS 1 LESS...
-            print('%d - %s%s' % (len(keypoint_matching), kp, '' if stance is None else ' - ' + stance))
+        def print_kp(kp, stance, keypoint_matching, sentences_data, n_sentences_per_kp, n_comments):
+
             sentences = []
             for match in keypoint_matching:
                 comment_id = str(match["comment_id"])
                 sent_id_in_comment = str(match["sentence_id"])
                 sent = sentences_data[comment_id]['sentences'][sent_id_in_comment]["sentence_text"]
                 sentences.append(sent)
+            print('%d - %s%s' % (n_comments, kp, '' if stance is None else ' - ' + stance))
+
             sentences = sentences[1:(n_sentences_per_kp + 1)]  # first sentence is the kp itself
             lines = split_sentences_to_lines(sentences, 0)
             for line in lines:
@@ -414,12 +417,17 @@ class KpsResult:
         n_displayed_kps = np.min([n_top_kps,total_n_kps])
         print(f'Displaying {n_displayed_kps} key points out of {total_n_kps}:')
 
-        for keypoint_matching in keypoint_matchings[:n_top_kps]:
-            kp = keypoint_matching['keypoint']
-            stance = None if 'stance' not in keypoint_matching else keypoint_matching['stance']
+        kp_to_n_comments = self._get_kp_to_n_matched_comments()
+        sorted_kps = list(sorted(kp_to_n_comments.keys(), key=lambda x:kp_to_n_comments[x], reverse=True))
+        kp_to_matching = {keypoint_matching['keypoint']:  keypoint_matching for keypoint_matching in keypoint_matchings}
+
+        for kp in sorted_kps:
             if kp == 'none':
                 continue
-            print_kp(kp, stance, keypoint_matching['matching'], sentences_data, n_sentences_per_kp)
+            keypoint_matching = kp_to_matching[kp]
+            stance = None if 'stance' not in keypoint_matching else keypoint_matching['stance']
+            n_comments = kp_to_n_comments[kp]
+            print_kp(kp, stance, keypoint_matching['matching'], sentences_data, n_sentences_per_kp, n_comments)
 
     def _get_number_of_unique_sentences(self, include_unmatched=True):
         if include_unmatched:
