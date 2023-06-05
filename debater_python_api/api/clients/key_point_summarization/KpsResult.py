@@ -26,7 +26,7 @@ def _get_comparison_df(results_to_kp_to_n_comments, results_to_total_comments, t
         new_kps = set(n_comments_per_kp_per_title.keys()).difference(set(ordered_kps))
         new_kps = sorted(new_kps, key= lambda x:n_comments_per_kp_per_title[x] ,reverse=True)
         ordered_kps += new_kps
-        cols.extend([f"{title}_n_comments", f"{title}_precent"])
+        cols.extend([f"{title}_n_comments", f"{title}_percent"])
 
     if "none" in ordered_kps:
         ordered_kps.remove("none")
