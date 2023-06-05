@@ -397,6 +397,7 @@ class KpsResult:
 
         stance_str = self.get_stance_str()
         print(f'{title} results, stance: {stance_str} ')
+        print(f'n_comments: {n_total_comments}')
         print('Coverage (all comments): %.2f' % (
                 float(n_matched_comments) / float(n_total_comments) * 100.0))
 
