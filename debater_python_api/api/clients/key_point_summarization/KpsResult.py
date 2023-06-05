@@ -408,22 +408,20 @@ class KpsResult:
                 cov_from_stance = float(n_matched_comments) / float(n_comments_with_stance) * 100.0
             print(f'Coverage ({stance_str} comments): %.2f' % cov_from_stance)
 
-        total_n_kps = len(keypoint_matchings)
-        kps_have_none = "none" in [keypoint_matching['keypoint'] for keypoint_matching in keypoint_matchings]
-        if kps_have_none:
-            total_n_kps -= 1
+        kp_to_n_comments = self._get_kp_to_n_matched_comments()
+        if "none" in kp_to_n_comments:
+            del kp_to_n_comments["none"]
 
+        sorted_kps = list(sorted(kp_to_n_comments.keys(), key=lambda x: kp_to_n_comments[x], reverse=True))
+        total_n_kps = len(sorted_kps)
         n_top_kps = n_top_kps if n_top_kps else total_n_kps
-        n_displayed_kps = np.min([n_top_kps,total_n_kps])
+        n_displayed_kps = np.min([n_top_kps, total_n_kps])
+        sorted_kps = sorted_kps[:n_displayed_kps]
         print(f'Displaying {n_displayed_kps} key points out of {total_n_kps}:')
 
-        kp_to_n_comments = self._get_kp_to_n_matched_comments()
-        sorted_kps = list(sorted(kp_to_n_comments.keys(), key=lambda x:kp_to_n_comments[x], reverse=True))
         kp_to_matching = {keypoint_matching['keypoint']:  keypoint_matching for keypoint_matching in keypoint_matchings}
 
         for kp in sorted_kps:
-            if kp == 'none':
-                continue
             keypoint_matching = kp_to_matching[kp]
             stance = None if 'stance' not in keypoint_matching else keypoint_matching['stance']
             n_comments = kp_to_n_comments[kp]
