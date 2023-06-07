@@ -442,7 +442,7 @@ class KpsClient():
         Checks the connection to the service and if the service is UP and running.
         :return: a json with 'status': that have the value UP if all is well and DOWN otherwise.
         '''
-        return self._get(self.host + self_check_endpoint, None, timeout=180)
+        return self._get(self.host + self_check_endpoint, {}, timeout=180)
 
     def get_unmapped_sentences_for_kps_result(self, kps_result: KpsResult):
         '''
