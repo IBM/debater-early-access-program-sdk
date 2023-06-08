@@ -106,6 +106,14 @@ def graph_data_to_hierarchical_graph_data(graph_data_json_file=None,
         edges = [e for e in edges if int(id_to_node[e['data']['source']]['data']['n_matches']) <= int(
             id_to_node[e['data']['target']]['data']['n_matches'])]
 
+        # if source and target have the same number of matches - a cycle can still remain
+        edges_source_target = [(e['data']['source'], e['data']['target']) for e in edges]
+        to_remove = []
+        for (s_id, t_id) in edges_source_target:
+            if s_id < t_id and (t_id, s_id) in edges_source_target:
+                to_remove.append((s_id, t_id))
+        edges = [e for e in edges if (e['data']['source'], e['data']['target']) not in to_remove]
+
     source_target_to_score = {(e['data']['source'], e['data']['target']): e['data']['score'] for e in edges}
 
     # keep only edges to max parent
@@ -304,8 +312,8 @@ def get_hierarchical_kps_data(full_result_df, graph_data, min_n_matches = 5, fil
 
     for id in kp_id_to_data:
         kp_id_to_data[id].update({'parent':id_to_parent.get(id),
-                                  'n_matching_sents_in_subtree':id_to_n_matches_subtree_sent[id],
-                                  'n_matching_comments_in_subtree':id_to_n_matches_subtree_comments[id],
+                                  'n_matching_sents_in_subtree':id_to_n_matches_subtree_sent.get(id),
+                                  'n_matching_comments_in_subtree':id_to_n_matches_subtree_comments.get(id),
                                   "kids":id_to_kids.get(id, []),
                                   'kp_stance':kp_to_stance[kp_id_to_data[id]['kp']],
                                   'n_matching_comments':kp_to_n_matching_comments[kp_id_to_data[id]['kp']]})
