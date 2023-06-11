@@ -27,6 +27,9 @@ class KpsResult:
         :param result_json: the result json returned from the key point client using get_results.
         """
         self.result_json = result_json
+        kps = self.get_key_points()
+        if len(kps) == 0:
+            logging.info("No key points found. Returning empty KpsResult.")
         self.result_df = self._create_result_df()
         self.version = CURR_RESULTS_VERSION
         self.stances = set(result_json["job_metadata"]["per_stance"].keys()).difference({"no-stance"})
@@ -188,7 +191,13 @@ class KpsResult:
         :return: KpsResult object
         """
         if 'keypoint_matchings' not in result_json:
-            raise KpsIllegalInputException("Faulty results json provided: does not contain 'keypoint_matchings'. returning empty results")
+            raise KpsIllegalInputException("Faulty results json provided: does not contain 'keypoint_matching'.")
+        if "job_metadata" not in result_json:
+            raise KpsIllegalInputException("Faulty result_json provided: does not contain 'job_metadata'. result_json must be"
+                                           "the json object returned by the server when running with SDK version >= 5.0.0."
+                                           "Converting older json results is not supported. to generate the old"
+                                           "results for the given json object please use SDK version <= 4.3.2. To generate new result"
+                                           "please rerun the KPS job using the current SDK")
         else:
             try:
                 version = result_json.get("version", "1.0")
@@ -497,6 +506,7 @@ class KpsResult:
         :param pro_result: KpsResult generated from running on stance "PRO".
         :param con_result: KpsResult generated from running on stance "CON".
         """
+        logging.info("Merging positive and negative KpsResults.")
         assert pro_result.stances == {"pro"}, f"pro_result must be generated from running on stance 'PRO', given {pro_result.stances}"
         assert con_result.stances == {"con"}, f"con_result must be generated from running on stance 'CON', given {con_result.stances}"
         con_meta = con_result.result_json["job_metadata"]["general"]
@@ -605,6 +615,10 @@ class KpsResult:
             n_matches = len(matching_comments_set)
             kp_n_comments[kp] = n_matches
         return kp_n_comments
+
+    def get_key_points(self):
+        return [keypoint_matching["keypoint"] for keypoint_matching in self.result_json['keypoint_matchings'] if keypoint_matching["keypoint"] != "none"]
+
 
     def _get_kp_id_to_hierarchical_data(self):
         graph_data = create_graph_data(self.result_df, n_sentences=self._get_number_of_unique_sentences())
