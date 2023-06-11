@@ -95,7 +95,7 @@ class KpsResult:
             json.dump(self.result_json, f)
 
     @staticmethod
-    def load(json_file: str):
+    def load(json_file: str, filter_min_relations:Optional[float] = 0.4):
         """
         Load results from a json file
         :param json_file: the file to load the results from, obtained using the save() method.
@@ -104,7 +104,7 @@ class KpsResult:
         logging.info(f"Loading results from: {json_file}")
         with open(json_file, 'r') as f:
             json_res = json.load(f)
-            return KpsResult.create_from_result_json(json_res)
+            return KpsResult.create_from_result_json(json_res, filter_min_relations)
 
     def _create_result_df(self):
         sentences_data = self.result_json["sentences_data"]
@@ -519,7 +519,8 @@ class KpsResult:
         combined_results_json = {'keypoint_matchings':keypoint_matchings, "sentences_data":sentences_data,
                                  "version":CURR_RESULTS_VERSION,
                                  "job_metadata":new_metadata}
-        return KpsResult.create_from_result_json(combined_results_json)
+        filter_min_relations = np.min([pro_result.filter_min_relations, con_result.filter_min_relations])
+        return KpsResult.create_from_result_json(combined_results_json, filter_min_relations=filter_min_relations)
 
     @staticmethod
     # If result_json is of the old server version, convert to version 2.0
