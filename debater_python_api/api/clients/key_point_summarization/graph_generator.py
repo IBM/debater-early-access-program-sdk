@@ -1,10 +1,11 @@
+import itertools
 import json
 import logging
 import pandas as pd
 import numpy as np
 from debater_python_api.api.clients.key_point_summarization.utils import create_dict_to_list, read_dicts_from_df, \
-    get_unique_sent_id
-
+    get_unique_sent_id, sort_dict_items_by_value_then_key
+import networkx as nx
 
 def create_graph_data(full_results_df, n_sentences, min_n_similar_matches=5, n_matches_samples=20):
     def graph_to_graph_data(graph, n_sentences):
@@ -106,12 +107,28 @@ def graph_data_to_hierarchical_graph_data(graph_data_json_file=None,
         edges = [e for e in edges if int(id_to_node[e['data']['source']]['data']['n_matches']) <= int(
             id_to_node[e['data']['target']]['data']['n_matches'])]
 
-        # if source and target have the same number of matches - a cycle can still remain
-        edges_source_target = [(e['data']['source'], e['data']['target']) for e in edges]
-        to_remove = []
-        for (s_id, t_id) in edges_source_target:
-            if s_id < t_id and (t_id, s_id) in edges_source_target:
-                to_remove.append((s_id, t_id))
+        # find cycles of same size nodes and break them
+        source_target_to_score = {(e['data']['source'], e['data']['target']): e['data']['score'] for e in edges}
+        n_matches_to_node_ids = create_dict_to_list([(n['data']['n_matches'],n['data']['id']) for n in nodes])
+
+        to_remove = set()
+        for n, sub_node_ids in n_matches_to_node_ids.items():
+             if len(sub_node_ids) < 2:
+                 continue
+             sub_edges = [e for e in source_target_to_score.keys() if e[0] in sub_node_ids and e[1] in sub_node_ids]
+             if len(sub_edges) > 1:
+                graph = nx.DiGraph(incoming_graph_data=sub_edges)
+                cycles = list(nx.simple_cycles(graph))
+                cycle_to_edges_ids = {i : tuple([(c[i], c[(i+1)%len(c)]) for i in range(len(c))]) for i,c in enumerate(cycles)}
+
+                while len(cycle_to_edges_ids) > 0:
+                    edges_in_cycles = set(itertools.chain(*cycle_to_edges_ids.values()))
+                    edges_in_cycles_to_scores = {e: source_target_to_score[e] for e in edges_in_cycles}
+                    edges_in_cycles = [x[0] for x in sort_dict_items_by_value_then_key(edges_in_cycles_to_scores)]
+                    e = edges_in_cycles[-1]
+                    to_remove.add(e)
+                    cycle_to_edges_ids = dict(filter(lambda x: e not in x[1], cycle_to_edges_ids.items()))
+
         edges = [e for e in edges if (e['data']['source'], e['data']['target']) not in to_remove]
 
     source_target_to_score = {(e['data']['source'], e['data']['target']): e['data']['score'] for e in edges}

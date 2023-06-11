@@ -593,7 +593,7 @@ class KpsResult:
 
     def _get_kp_id_to_hierarchical_data(self):
         graph_data = create_graph_data(self.result_df, n_sentences=self._get_number_of_unique_sentences())
-        hierarchical_graph_data = graph_data_to_hierarchical_graph_data(graph_data=graph_data)
+        hierarchical_graph_data = graph_data_to_hierarchical_graph_data(graph_data=graph_data, filter_min_relations=self.filter_min_relations_for_text)
         return get_hierarchical_kps_data(self.result_df, hierarchical_graph_data, self.filter_min_relations_for_text)
 
     @staticmethod

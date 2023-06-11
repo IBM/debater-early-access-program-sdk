@@ -126,3 +126,10 @@ def filter_dict_by_keys(d, keys):
 
 def is_list_of_strings(lst):
     return isinstance(lst, list) and len([a for a in lst if not isinstance(a, str)]) == 0
+
+# sort by val (descending), with key (ascending) as tie breaker
+def sort_dict_items_by_value_then_key(d, val_reverse = True, key_reverse = False):
+    d_items = list(d.items())
+    d_items.sort(key=lambda x: x[0], reverse = key_reverse)
+    d_items.sort(key=lambda x: x[1], reverse = val_reverse)
+    return d_items
