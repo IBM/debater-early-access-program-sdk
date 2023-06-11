@@ -18,47 +18,6 @@ import os
 CURR_RESULTS_VERSION = "2.0"
 
 
-def _get_comparison_df(results_to_kp_to_n_comments, results_to_total_comments, titles):
-    ordered_kps = []
-    cols = ['key point']
-    for title in titles:
-        n_comments_per_kp_per_title = results_to_kp_to_n_comments[title]
-        new_kps = set(n_comments_per_kp_per_title.keys()).difference(set(ordered_kps))
-        new_kps = sorted(new_kps, key= lambda x:n_comments_per_kp_per_title[x] ,reverse=True)
-        ordered_kps += new_kps
-        cols.extend([f"{title}_n_comments", f"{title}_percent"])
-
-    if "none" in ordered_kps:
-        ordered_kps.remove("none")
-
-    add_change = False
-    if len(titles) == 2:
-        cols.append("change_percent")
-        add_change = True
-
-    rows = []
-    title_to_precent = {}
-    total_row = ["total"]
-    for i,kp in enumerate(ordered_kps):
-        row = [kp]
-        for title in titles:
-            n_comments_title_kp = results_to_kp_to_n_comments[title].get(kp,0)
-            percent_comments_title_kp = (100*n_comments_title_kp/results_to_total_comments[title]) if n_comments_title_kp else 0
-            row.extend([n_comments_title_kp,f'{percent_comments_title_kp:.2f}%'])
-            title_to_precent[title] = percent_comments_title_kp
-            if i == 0:
-                total_row.extend([results_to_total_comments[title] , "1"])
-        if add_change:
-            change_percent = title_to_precent[titles[1]] - title_to_precent[titles[0]]
-            row.append(f'{change_percent:.2f}%')
-            if i==0:
-                total_row.append("")
-        rows.append(row)
-    rows.append(total_row)
-    comparison_df = pd.DataFrame(rows, columns=cols)
-    return comparison_df
-
-
 class KpsResult:
     """
     Class to hold and process the results of a KPS job.
@@ -440,6 +399,53 @@ class KpsResult:
                     total_sentences = total_sentences.union(matching_sents_ids)
             return len(total_sentences)
 
+    def _get_comparison_df(self, results_to_kp_to_n_comments, results_to_total_comments, titles, kp_to_stance):
+        ordered_kps = []
+        cols = ['key point', 'stance']
+
+        for title in titles:
+            n_comments_per_kp_per_title = results_to_kp_to_n_comments[title]
+            new_kps = set(n_comments_per_kp_per_title.keys()).difference(set(ordered_kps))
+            new_kps = sorted(new_kps, key=lambda x: n_comments_per_kp_per_title[x], reverse=True)
+            ordered_kps += new_kps
+            cols.extend([f"{title}_n_comments", f"{title}_percent"])
+
+        if "none" in ordered_kps:
+            ordered_kps.remove("none")
+
+        add_change = False
+        if len(titles) == 2:
+            cols.append("change_percent")
+            add_change = True
+
+        rows = []
+        title_to_precent = {}
+        total_row = ["total", ""]
+        for i, kp in enumerate(ordered_kps):
+            row = [kp, kp_to_stance[kp]]
+
+            for title in titles:
+                n_comments_title_kp = results_to_kp_to_n_comments[title].get(kp, 0)
+                percent_comments_title_kp = (
+                            100 * n_comments_title_kp / results_to_total_comments[title]) if n_comments_title_kp else 0
+                row.extend([n_comments_title_kp, f'{percent_comments_title_kp:.2f}%'])
+                title_to_precent[title] = percent_comments_title_kp
+                if i == 0:
+                    total_row.extend([results_to_total_comments[title], "1"])
+            if add_change:
+                change_percent = title_to_precent[titles[1]] - title_to_precent[titles[0]]
+                row.append(f'{change_percent:.2f}%')
+                if i == 0:
+                    total_row.append("")
+
+            rows.append(row)
+        rows.append(total_row)
+        comparison_df = pd.DataFrame(rows, columns=cols)
+
+        if len(set(kp_to_stance.values()).difference({"no-stance", None})) == 0:
+            comparison_df = comparison_df[[c for c in comparison_df.columns if c != "stance"]]
+        return comparison_df
+
     def compare_with_comment_subsets(self, comments_subsets_dict:Dict[str, List[str]], include_full:Optional[bool] = True):
         """
         Compare the full result with the results generated from comment subsets. This is useful in order to compare the
@@ -458,7 +464,9 @@ class KpsResult:
         results_to_kp_to_n_comments = {"full": self._get_kp_to_n_matched_comments()} if include_full else {}
         results_to_kp_to_n_comments.update(
             {title: self._get_kp_to_n_matched_comments(comments_subset=comment_ids) for title, comment_ids in comments_subsets_dict.items()})
-        return _get_comparison_df(results_to_kp_to_n_comments, results_to_total_comments, titles)
+
+        kp_to_stance = self.get_kp_to_stance()
+        return self._get_comparison_df(results_to_kp_to_n_comments, results_to_total_comments, titles, kp_to_stance)
 
     def compare_with_other_results(self, this_title : str, other_results_dict : Dict[str,'KpsResult']):
         """
@@ -474,7 +482,12 @@ class KpsResult:
 
         results_to_kp_to_n_comments = {this_title:self._get_kp_to_n_matched_comments()}
         results_to_kp_to_n_comments.update({title:result._get_kp_to_n_matched_comments()  for title,result in other_results_dict.items()})
-        return _get_comparison_df(results_to_kp_to_n_comments, results_to_total_comments, titles)
+
+        kp_to_stance = self.get_kp_to_stance()
+        for result in other_results_dict.values():
+            kp_to_stance.update(result.get_kp_to_stance())
+
+        return self._get_comparison_df(results_to_kp_to_n_comments, results_to_total_comments, titles, kp_to_stance)
 
     @staticmethod
     def get_merged_pro_con_results(pro_result: 'KpsResult', con_result: 'KpsResult'):
@@ -645,3 +658,7 @@ class KpsResult:
         elif len(self.stances) == 1:
             return list(self.stances)[0]
         return "pro and con"
+
+    def get_kp_to_stance(self):
+         keypoint_matchings = self.result_json["keypoint_matchings"]
+         return {keypoint_matching['keypoint']:keypoint_matching.get("stance", None) for keypoint_matching in keypoint_matchings}

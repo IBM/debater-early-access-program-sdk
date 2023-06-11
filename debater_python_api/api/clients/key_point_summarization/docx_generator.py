@@ -30,7 +30,7 @@ def get_stance_to_stance_str(stances):
     raise KpsIllegalInputException(f"unsupported stances {stances}")
 
 def get_kp_stance_if_needed(id_data, stances):
-    return id_data["kp_stance"].capitalize() + ", " if stances == {"pro", "con"} else ""
+    return id_data["kp_stance"].capitalize() + ", " if set(stances) == {"pro", "con"} else ""
 
 def insertHR(paragraph):
     p = paragraph._p  # p is the <w:p> XML element
@@ -266,7 +266,7 @@ def save_hierarchical_graph_data_to_docx(full_result_df, kp_id_to_data, result_f
         kp_stance_str = get_kp_stance_if_needed(id_data, stances)
         n_matches = int(id_data["n_matching_sentences"])
         if n_matches == id_data["n_matching_sents_in_subtree"]:
-            msg = f'{kp} ({n_matches} matches)'
+            msg = f'{kp} ({kp_stance_str}{n_matches} matches)'
         else:
             if sort_by_subtree:
                 msg = f'{kp} ({kp_stance_str}{id_data["n_matching_sents_in_subtree"]} matching sentences in subtree, {n_matches} matches)'
