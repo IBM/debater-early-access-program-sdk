@@ -2,6 +2,7 @@ import logging
 import random
 
 import docx
+import numpy as np
 from docx.enum.dml import MSO_THEME_COLOR_INDEX
 from docx.shared import Inches, Pt, RGBColor
 from docx import Document
@@ -102,35 +103,26 @@ def add_data_stats(meta_data, dicts, kp_id_to_data, document, stances, min_n_mat
     n_total_sentences = meta_data["general"]["n_sentences"]
     n_total_comments = meta_data["general"]["n_comments"]
     dicts_not_none = list(filter(lambda r: r["kp"] != "none", dicts))
-    n_matches_sentences = len(set([get_unique_sent_id(d) for d in dicts_not_none]))
     n_matches_comments = len(set([d["comment_id"] for d in dicts_not_none])) # Todo: this includes matches to smaller, filtered kps!
-    rate_matched_sents = 100*n_matches_sentences / n_total_sentences
     rate_matched_comments = 100*n_matches_comments / n_total_comments
-
-    stances_str = get_stance_to_stance_str(stances).lower()
 
     heading = document.add_heading('Data Statistics', 1)
     set_heading(heading)
-    s = f'Analyzed {n_total_comments} comments ({n_total_sentences} sentences).\n' \
-        f'Identified {n_kps} {stances_str.lower()} key points with at least {min_n_matches or 1} matching sentences.\n' \
-        f'{int(rate_matched_comments)}% of the comments (and {int(rate_matched_sents)}%' \
-        f' of the sentences) were matched to at least one key point.\n'
+    s = f'Analyzed {n_total_comments} comments with {n_total_sentences} sentences.\n' \
+        f'Identified {n_kps} key points with at least {min_n_matches or 1} matching sentences.\n' \
+        f'{int(np.round(rate_matched_comments, 0))}% of the comments were matched to at least one key point.\n'
     for stance in ["pro","con"]:
         if stance in stances:
             stance_str = get_stance_to_stance_str(stance).lower()
             n_kps_stance = len(list(filter(lambda kp_id:kp_id_to_data[kp_id].get("kp_stance")==stance, kp_id_to_data)))
             kp_stance_str = f"of {n_kps_stance} {stance_str} key points." if len(stances) > 1 else "key point."
 
-            n_stance_sentences = meta_data["per_stance"][stance]["n_sentences_stance"]
             n_stance_comments = meta_data["per_stance"][stance]["n_comments_stance"]
             dicts_stance = list(filter(lambda r: r["kp_stance"] == stance, dicts_not_none))
-            n_matches_sentences_stance = len(set([get_unique_sent_id(d) for d in dicts_stance]))
             n_matches_comments_stance = len(set([d["comment_id"] for d in dicts_stance]))
-            matched_sentences_stance_rate = 100*n_matches_sentences_stance/n_stance_sentences if n_stance_sentences > 0 else 0
             matched_comments_stance_rate = 100*n_matches_comments_stance / n_stance_comments if n_stance_comments > 0 else 0
-            s += f'Identified {n_stance_comments} {stance_str} comments (and {n_stance_sentences} {stance_str} sentences).\n'\
-                 f'{int(matched_comments_stance_rate)}% of these comments (and {int(matched_sentences_stance_rate)}% of these sentences)' \
-                f' were matched to at least one {kp_stance_str}\n'
+            s += f'\nIdentified {n_stance_comments} {stance_str} comments.\n'\
+                 f'{int(matched_comments_stance_rate)}% of these comments were matched to at least one {kp_stance_str}\n'
     p = document.add_paragraph()
     run = p.add_run(s)
     run.font.size = Pt(12)
