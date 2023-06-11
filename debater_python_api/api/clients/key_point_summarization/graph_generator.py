@@ -66,7 +66,7 @@ def create_graph_data(full_results_df, n_sentences, min_n_similar_matches=5, n_m
                 sents_i = kp_to_sentences[kp_i]
                 sents_j = kp_to_sentences[kp_j]
                 n_sentences_i_in_j = len([s for s in sents_i if s in sents_j])
-                if n_sentences_i_in_j > min_n_similar_matches:
+                if n_sentences_i_in_j >= min_n_similar_matches:
                     edge_to_score[(i, j)] = n_sentences_i_in_j / len(sents_i)
     nodes = [get_node(i, kp, kp_to_dicts, n_matches_samples) for i, kp in enumerate(all_kps)]
     edges = [{'source': i, 'target': j, 'score': edge_to_score[i, j]} for (i, j) in edge_to_score]
@@ -78,8 +78,7 @@ def create_graph_data(full_results_df, n_sentences, min_n_similar_matches=5, n_m
 def graph_data_to_hierarchical_graph_data(graph_data_json_file=None,
                                           graph_data=None,
                                           filter_small_nodes=-1.0,
-                                          filter_min_relations=-1.0,
-                                          filter_big_to_small_edges=True):
+                                          filter_min_relations=-1.0):
     if (graph_data_json_file is None and graph_data is None) or (
             graph_data_json_file is not None and graph_data is not None):
         logging.error('Please pass either graph_data_json_file or graph_data')
@@ -103,33 +102,33 @@ def graph_data_to_hierarchical_graph_data(graph_data_json_file=None,
 
     edges = [e for e in edges if (e['data']['source'] in nodes_ids and e['data']['target'] in nodes_ids)]
 
-    if filter_big_to_small_edges:
-        edges = [e for e in edges if int(id_to_node[e['data']['source']]['data']['n_matches']) <= int(
-            id_to_node[e['data']['target']]['data']['n_matches'])]
+    # filter big to_small edges:
+    edges = [e for e in edges if int(id_to_node[e['data']['source']]['data']['n_matches']) <= int(
+        id_to_node[e['data']['target']]['data']['n_matches'])]
 
-        # find cycles of same size nodes and break them
-        source_target_to_score = {(e['data']['source'], e['data']['target']): e['data']['score'] for e in edges}
-        n_matches_to_node_ids = create_dict_to_list([(n['data']['n_matches'],n['data']['id']) for n in nodes])
+    # find cycles of same size nodes and break them
+    source_target_to_score = {(e['data']['source'], e['data']['target']): e['data']['score'] for e in edges}
+    n_matches_to_node_ids = create_dict_to_list([(n['data']['n_matches'],n['data']['id']) for n in nodes])
 
-        to_remove = set()
-        for n, sub_node_ids in n_matches_to_node_ids.items():
-             if len(sub_node_ids) < 2:
-                 continue
-             sub_edges = [e for e in source_target_to_score.keys() if e[0] in sub_node_ids and e[1] in sub_node_ids]
-             if len(sub_edges) > 1:
-                graph = nx.DiGraph(incoming_graph_data=sub_edges)
-                cycles = list(nx.simple_cycles(graph))
-                cycle_to_edges_ids = {i : tuple([(c[i], c[(i+1)%len(c)]) for i in range(len(c))]) for i,c in enumerate(cycles)}
+    to_remove = set()
+    for n, sub_node_ids in n_matches_to_node_ids.items():
+         if len(sub_node_ids) < 2:
+             continue
+         sub_edges = [e for e in source_target_to_score.keys() if e[0] in sub_node_ids and e[1] in sub_node_ids]
+         if len(sub_edges) > 1:
+            graph = nx.DiGraph(incoming_graph_data=sub_edges)
+            cycles = list(nx.simple_cycles(graph))
+            cycle_to_edges_ids = {i : tuple([(c[i], c[(i+1)%len(c)]) for i in range(len(c))]) for i,c in enumerate(cycles)}
 
-                while len(cycle_to_edges_ids) > 0:
-                    edges_in_cycles = set(itertools.chain(*cycle_to_edges_ids.values()))
-                    edges_in_cycles_to_scores = {e: source_target_to_score[e] for e in edges_in_cycles}
-                    edges_in_cycles = [x[0] for x in sort_dict_items_by_value_then_key(edges_in_cycles_to_scores)]
-                    e = edges_in_cycles[-1]
-                    to_remove.add(e)
-                    cycle_to_edges_ids = dict(filter(lambda x: e not in x[1], cycle_to_edges_ids.items()))
+            while len(cycle_to_edges_ids) > 0:
+                edges_in_cycles = set(itertools.chain(*cycle_to_edges_ids.values()))
+                edges_in_cycles_to_scores = {e: source_target_to_score[e] for e in edges_in_cycles}
+                edges_in_cycles = [x[0] for x in sort_dict_items_by_value_then_key(edges_in_cycles_to_scores)]
+                e = edges_in_cycles[-1]
+                to_remove.add(e)
+                cycle_to_edges_ids = dict(filter(lambda x: e not in x[1], cycle_to_edges_ids.items()))
 
-        edges = [e for e in edges if (e['data']['source'], e['data']['target']) not in to_remove]
+    edges = [e for e in edges if (e['data']['source'], e['data']['target']) not in to_remove]
 
     source_target_to_score = {(e['data']['source'], e['data']['target']): e['data']['score'] for e in edges}
 
@@ -203,7 +202,7 @@ def filter_graph_by_relation_strength(graph_data, min_relation_strength):
 
 
 def get_hierarchical_graph_from_tree_and_subset_results(graph_data_hierarchical, subset_results_df,
-                                                        filter_min_relations_for_text=0.4,
+                                                        filter_min_relations=0.4,
                                                         n_top_matches_in_graph=20):
 
     n_sentences = len(set(subset_results_df["sentence_text"]))
@@ -211,8 +210,8 @@ def get_hierarchical_graph_from_tree_and_subset_results(graph_data_hierarchical,
 
     nodes = [d for d in graph_data_hierarchical if d['type'] == 'node']
     edges = [d for d in graph_data_hierarchical if d['type'] == 'edge']
-    if filter_min_relations_for_text > 0:
-        edges = [e for e in edges if float(e['data']['score']) >= filter_min_relations_for_text]
+    if filter_min_relations > 0:
+        edges = [e for e in edges if float(e['data']['score']) >= filter_min_relations]
 
     # change graph nodes to match new results:
     n_kps_in_new_only = len(set(results_kps).difference(set(n["data"]['kp'] for n in nodes)))

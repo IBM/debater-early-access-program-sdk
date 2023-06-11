@@ -71,7 +71,7 @@ class KpsResult:
         self.result_df = self._create_result_df()
         self.version = CURR_RESULTS_VERSION
         self.stances = set(result_json["job_metadata"]["per_stance"].keys()).difference({"no-stance"})
-        self.filter_min_relations_for_text = filter_min_relations
+        self.filter_min_relations = filter_min_relations
         self.kp_id_to_hierarchical_data = self._get_kp_id_to_hierarchical_data()
         self.summary_df = self._result_df_to_summary_df()
 
@@ -221,10 +221,11 @@ class KpsResult:
         return pd.DataFrame(summary_rows, columns=summary_cols)
 
     @staticmethod
-    def create_from_result_json(result_json, filter_min_relations_for_text=0.4):
+    def create_from_result_json(result_json, filter_min_relations=0.4):
         """
         Create KpsResults from results_json
         :param result_json: the json object obtained from the client via "get_result" or "get_result_from_futures"
+        :param filter_min_relations: minimal relation score between key points to be considered related in the hierarchy
         :return: KpsResult object
         """
         if 'keypoint_matchings' not in result_json:
@@ -234,7 +235,7 @@ class KpsResult:
                 version = result_json.get("version", "1.0")
                 if version != CURR_RESULTS_VERSION:
                     result_json = KpsResult._convert_to_new_version(result_json, version, CURR_RESULTS_VERSION)
-                return KpsResult(result_json, filter_min_relations_for_text)
+                return KpsResult(result_json, filter_min_relations)
             except Exception as e:
                 logging.error("Could not create KpsResults from json.")
                 raise e
@@ -301,9 +302,9 @@ class KpsResult:
 
         new_hierarchical_graph_data = get_hierarchical_graph_from_tree_and_subset_results(
             hierarchical_graph_full_data,
-            self.result_df, self.filter_min_relations_for_text, n_top_matches_in_graph)
+            self.result_df, self.filter_min_relations, n_top_matches_in_graph)
 
-        new_kp_id_to_hierarchical_data = get_hierarchical_kps_data(self.result_df, new_hierarchical_graph_data, self.filter_min_relations_for_text)
+        new_kp_id_to_hierarchical_data = get_hierarchical_kps_data(self.result_df, new_hierarchical_graph_data, self.filter_min_relations)
         self.generate_docx_report(output_dir, result_name,
                             n_matches_in_docx=n_matches_in_docx,
                             include_match_score_in_docx=include_match_score_in_docx,
@@ -593,8 +594,8 @@ class KpsResult:
 
     def _get_kp_id_to_hierarchical_data(self):
         graph_data = create_graph_data(self.result_df, n_sentences=self._get_number_of_unique_sentences())
-        hierarchical_graph_data = graph_data_to_hierarchical_graph_data(graph_data=graph_data, filter_min_relations=self.filter_min_relations_for_text)
-        return get_hierarchical_kps_data(self.result_df, hierarchical_graph_data, self.filter_min_relations_for_text)
+        hierarchical_graph_data = graph_data_to_hierarchical_graph_data(graph_data=graph_data, filter_min_relations=self.filter_min_relations)
+        return get_hierarchical_kps_data(self.result_df, hierarchical_graph_data, self.filter_min_relations)
 
     @staticmethod
     def _get_stance_from_server_stances(server_stances):
