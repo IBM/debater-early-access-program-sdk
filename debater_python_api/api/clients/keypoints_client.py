@@ -345,8 +345,7 @@ class KpsClient():
         logging.info(f'started a kp summarization job - domain: {domain}, stance: {stance}, run_params: {run_params}, {"" if description is None else f"description: {description}, "}job_id: {res["job_id"]}')
         return KpsJobFuture(self, res['job_id'])
 
-    def get_kps_job_status(self, job_id: str, top_k_kps: Optional[int] = None,
-                                     top_k_sentences_per_kp: Optional[int] = None):
+    def get_kps_job_status(self, job_id: str):
         '''
         Checks for the status of a key point summarization job. It returns a json with a 'status' key that can have one of the following values: PENDING, PROCESSING, DONE, CANCELED, ERROR
         If the status is PROCESSING, it also has a 'progress' key that describes the calculation progress.
@@ -358,13 +357,6 @@ class KpsClient():
         :return: see description above.
         '''
         params = {'job_id': job_id}
-
-        if top_k_kps is not None:
-            params['top_k_kps'] = top_k_kps
-
-        if top_k_sentences_per_kp is not None:
-            params['top_k_sentences_per_kp'] = top_k_sentences_per_kp
-
         return self._get(self.host + kp_extraction_endpoint, params, timeout=180)
 
     def cancel_kps_job(self, job_id: str):
@@ -608,13 +600,11 @@ class KpsJobFuture:
         '''
         return self.job_id
 
-    def get_result(self, top_k_kps: Optional[int] = None, top_k_sentences_per_kp: Optional[int] = None,
+    def get_result(self,
                    dont_wait: bool = False, wait_secs: Optional[int] = None, polling_timeout_secs: Optional[int] = None,
                    high_verbosity: bool = True) -> KpsResult:
         '''
         Retreives the job's result. This method polls and waits till the job is done and the result is available.
-        :param top_k_kps: use this parameter to truncate the result json to have only the top K key points.
-        :param top_k_sentences_per_kp: use this parameter to truncate the result json to have only the top K matched sentences per key point.
         :param dont_wait: when True, tries to get the result once and returns it if it's available, otherwise returns None.
         :param wait_secs: limit the waiting time (in seconds).
         :param polling_timeout_secs: sets the time to wait before polling again (in seconds). The default is 30 seconds.
@@ -625,7 +615,7 @@ class KpsJobFuture:
 
         do_again = True
         while do_again:
-            result = self.client.get_kps_job_status(self.job_id, top_k_kps=top_k_kps, top_k_sentences_per_kp=top_k_sentences_per_kp)
+            result = self.client.get_kps_job_status(self.job_id)
             if result['status'] == 'PENDING':
                 if high_verbosity:
                     logging.info('job_id %s is pending' % self.job_id)
