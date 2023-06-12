@@ -224,7 +224,6 @@ class KpsResult:
     def generate_docx_report(self, output_dir: str, result_name: str,
                              n_matches_in_docx: Optional[int] = 50,
                              include_match_score_in_docx: Optional[bool] = False,
-                             min_n_matches_in_docx: Optional[int] = 5,
                              kp_id_to_hierarchical_data=None):
         """
         creates <output_dir>/<result_name>_hierarchical.docx: This Microsoft Word document shows the key point hierarchy and matching sentences
@@ -233,7 +232,6 @@ class KpsResult:
         :param result_name: name of the results to appear in the output files.
         :param n_matches_in_docx: number of top matches to write in the textual summary (docx file). Pass None for all matches.
         :param include_match_score_in_docx: when set to true, the match score between the sentence and the key point is added.
-        :param min_n_matches_in_docx: remove key points with less than min_n_matches_in_docx matching sentences.
         :param kp_id_to_hierarchical_data: optional, should be set to None.
         """
         if not kp_id_to_hierarchical_data:
@@ -243,12 +241,11 @@ class KpsResult:
         save_hierarchical_graph_data_to_docx(full_result_df=self.result_df, kp_id_to_data=kp_id_to_hierarchical_data,
                                              result_filename=docx_file, meta_data=meta_data, n_matches=n_matches_in_docx,
                                              include_match_score=include_match_score_in_docx,
-                                             min_n_matches=min_n_matches_in_docx)
+                                             min_n_matches=0)
 
     def generate_docx_report_using_given_tree(self, full_results,
                                               output_dir, result_name, n_top_matches_in_graph=20,
-                                              n_matches_in_docx=50, include_match_score_in_docx=False,
-                                              min_n_matches_in_docx=5):
+                                              n_matches_in_docx=50, include_match_score_in_docx=False):
         '''
         Create hierarchical result for this result, using a precalculated hierarchical results.
         This is useful when we first create results using the whole data, and then want to calculate the
@@ -263,7 +260,6 @@ class KpsResult:
         :param n_top_matches_in_graph : optional, number of top matches to add to the graph_data file.
         :param n_matches_in_docx: optional, number of top matches to write in the textual summary (docx file). Pass None for all matches.
         :param include_match_score_in_docx: optional, when set to true, the match score between the sentence and the key point is added.
-        :param min_n_matches_in_docx: optional, remove key points with less than min_n_matches_in_docx matching sentences.
         '''
         graph_full_data = create_graph_data(full_results.result_df, full_results._get_number_of_unique_sentences())
         hierarchical_graph_full_data = graph_data_to_hierarchical_graph_data(graph_data=graph_full_data)
@@ -276,13 +272,11 @@ class KpsResult:
         self.generate_docx_report(output_dir, result_name,
                             n_matches_in_docx=n_matches_in_docx,
                             include_match_score_in_docx=include_match_score_in_docx,
-                            min_n_matches_in_docx=min_n_matches_in_docx,
                             kp_id_to_hierarchical_data = new_kp_id_to_hierarchical_data)
 
     def export_to_all_outputs(self, output_dir: str, result_name: str,
                               n_matches_in_docx: Optional[int] = 50,
                               include_match_score_in_docx: Optional[bool] = False,
-                              min_n_matches_in_docx: Optional[int] = 5,
                               ):
         """
         Generates all the kps available output types.
@@ -290,7 +284,6 @@ class KpsResult:
         :param result_name: name of the results to appear in the output files.
         :param n_matches_in_docx: optional, number of top matches to write in the textual summary (docx file). Pass None for all matches.
         :param include_match_score_in_docx: optional, when set to true, the match score between the sentence and the key point is added.
-        :param min_n_matches_in_docx: optional, remove key points with less than min_n_matches_in_docx matching sentences.
         Creates 3 outout files:
              * <ouput_dir>/<result_name>.csv : full results as csv .
              * <ouput_dir>/<result_name>_kps_summary.csv : summary results as csv.
@@ -306,8 +299,7 @@ class KpsResult:
 
         self.generate_docx_report(output_dir, result_name,
                                   n_matches_in_docx=n_matches_in_docx,
-                                  include_match_score_in_docx=include_match_score_in_docx,
-                                  min_n_matches_in_docx=min_n_matches_in_docx)
+                                  include_match_score_in_docx=include_match_score_in_docx)
 
     def print_result(self, n_sentences_per_kp: int, title: str, n_top_kps:Optional[int]=None):
         '''

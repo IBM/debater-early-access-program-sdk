@@ -109,7 +109,7 @@ def add_data_stats(meta_data, dicts, kp_id_to_data, document, stances, min_n_mat
     heading = document.add_heading('Data Statistics', 1)
     set_heading(heading)
     s = f'Analyzed {n_total_comments} comments with {n_total_sentences} sentences.\n' \
-        f'Identified {n_kps} key points with at least {min_n_matches or 1} matching sentences.\n' \
+        f'Identified {n_kps} key points.\n' \
         f'{int(np.round(rate_matched_comments, 0))}% of the comments were matched to at least one key point.\n'
     for stance in ["pro","con"]:
         if stance in stances:
