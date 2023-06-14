@@ -66,12 +66,13 @@ def write_df_to_file(df, file):
 
 
 def update_row_with_stance_data(r):
-    stance_dict = dict(r["stance_dict"])
-    stance_list = list(stance_dict.items())
-    stance_list = sorted(stance_list, reverse=True, key=lambda item: item[1])
-    stance, conf = stance_list[0]
-    r["stance"] = stance
-    r["stance_conf"] = conf
+    if "stance_dict" in r and len(r["stance_dict"]) > 0:
+        stance_dict = dict(r["stance_dict"])
+        stance_list = list(stance_dict.items())
+        stance_list = sorted(stance_list, reverse=True, key=lambda item: item[1])
+        stance, conf = stance_list[0]
+        r["selected_stance"] = stance
+        r["stance_conf"] = conf
     return r
 
 

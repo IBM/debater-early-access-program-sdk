@@ -10,7 +10,7 @@ import numpy as np
 
 from debater_python_api.api.clients.key_point_summarization.KpsExceptions import KpsIllegalInputException
 from debater_python_api.api.clients.key_point_summarization.utils import read_dicts_from_df, create_dict_to_list, \
-    write_df_to_file, get_unique_sent_id, filter_dict_by_keys
+    write_df_to_file, get_unique_sent_id, filter_dict_by_keys, update_row_with_stance_data
 from debater_python_api.api.clients.key_point_summarization.docx_generator import save_hierarchical_graph_data_to_docx
 from debater_python_api.api.clients.key_point_summarization.graph_generator import create_graph_data, graph_data_to_hierarchical_graph_data, \
     get_hierarchical_graph_from_tree_and_subset_results, get_hierarchical_kps_data
@@ -36,6 +36,30 @@ class KpsResult:
         self.filter_min_relations = filter_min_relations
         self.kp_id_to_hierarchical_data = self._get_kp_id_to_hierarchical_data()
         self.summary_df = self._result_df_to_summary_df()
+
+    def get_unmapped_sentences_df(self):
+        """
+        return a df with all the sentences not matched during the job (either filtered for length/stance or no matching key point was found).
+        """
+        unmatched_sentences = self.result_json['unmatched_sentences']
+        sentences_data = self.result_json['sentences_data']
+        data_cols = ['span_start', 'span_end', 'num_tokens', 'argument_quality','sentence_text','stance']
+        rows = []
+
+        for s in unmatched_sentences:
+            comment_id = str(s["comment_id"])
+            sent_id_in_comment = str(s["sentence_id"])
+            comment_data = sentences_data[comment_id]
+            sent_data = comment_data["sentences"][sent_id_in_comment]
+            sent_row = [comment_id, sent_id_in_comment, comment_data["sents_in_comment"]] + [sent_data[c] for c in data_cols]
+            rows.append(sent_row)
+
+        cols = ['comment_id', 'sentence_id', "sents_in_comment"] + data_cols
+
+        unmatched_df = pd.DataFrame(rows, columns=cols)
+        unmatched_df = unmatched_df.rename(columns={"stance":"stance_dict"})
+        unmatched_df = unmatched_df.apply(lambda r: update_row_with_stance_data(r), axis=1)
+        return unmatched_df
 
     def get_domain(self):
         return self.result_json["job_metadata"]["general"]["domain"]
@@ -123,9 +147,8 @@ class KpsResult:
 
         kp_to_dicts = create_dict_to_list([(d['kp'], d) for d in dicts])
 
-        general_metadata = self.result_json["job_metadata"]["general"]
-        n_total_sentences = general_metadata["n_sentences"]
-        n_total_comments = general_metadata["n_comments"]
+        n_total_sentences = self._get_number_of_unique_sentences()
+        n_total_comments = self._get_number_of_unique_comments()
 
         summary_rows = []
         summary_cols = ["key_point", '#comments', 'comments_coverage', "#sentences", 'sentences_coverage', "stance","kp_id","parent_id", "n_comments_subtree"]
@@ -517,7 +540,9 @@ class KpsResult:
                     none_matchings.extend(keypoint_matching["matching"])
                 else:
                     keypoint_matchings.append(keypoint_matching)
-        keypoint_matchings.append({'keypoint':'none', 'matching':none_matchings})
+
+        if len(none_matchings) > 0: # if there were non keypoints in original results, for backwards compatibility
+            keypoint_matchings.append({'keypoint':'none', 'matching':none_matchings})
         keypoint_matchings.sort(key=lambda matchings: len(matchings['matching']), reverse=True)
 
         sentences_data = pro_result.result_json['sentences_data']
@@ -527,13 +552,18 @@ class KpsResult:
             for sent_id_in_comment, sent_data in comment_data_dict["sentences"].items():
                  sentences_data[comment_id]["sentences"][sent_id_in_comment] = sent_data
 
+        pro_unmatched_sents = set([tuple(d.items()) for d in pro_result.result_json["unmatched_sentences"]])
+        con_unmatched_sents = set([tuple(d.items()) for d in con_result.result_json["unmatched_sentences"]])
+        unmatched_sents = pro_unmatched_sents.intersection(con_unmatched_sents)
+        unmatched_sents = [dict(s_data) for s_data in unmatched_sents]
+
         pro_metadata = pro_result.result_json["job_metadata"]
         con_metadata = con_result.result_json["job_metadata"]
         new_metadata = {"general":pro_metadata["general"],
                         "per_stance":{"pro":pro_metadata["per_stance"]["pro"], "con":con_metadata["per_stance"]["con"]}}
         combined_results_json = {'keypoint_matchings':keypoint_matchings, "sentences_data":sentences_data,
                                  "version":CURR_RESULTS_VERSION,
-                                 "job_metadata":new_metadata}
+                                 "job_metadata":new_metadata, "unmatched_sentences":unmatched_sents}
         filter_min_relations = np.min([pro_result.filter_min_relations, con_result.filter_min_relations])
         return KpsResult.create_from_result_json(combined_results_json, filter_min_relations=filter_min_relations)
 
@@ -544,6 +574,13 @@ class KpsResult:
         metadata = result_json["job_metadata"]
         kps_stance = KpsResult._get_stance_from_server_stances(metadata["stances"])
         sentences_data = {}
+
+        unmapped_sentences = result_json.get("unused_sentences", []) # for server backward compatibility
+        unmapped_sentences_ids = []
+        for s in unmapped_sentences:
+            KpsResult._add_sentence_to_sentences_data(s, sentences_data)
+            unmapped_sentences_ids.append({"comment_id":s["comment_id"], "sentence_id":str(s["sentence_id"])})
+
         new_matchings = []
         for keypoint_matching in result_json['keypoint_matchings']:
             kp = keypoint_matching['keypoint']
@@ -553,26 +590,21 @@ class KpsResult:
                 new_kp_matching["stance"] = kps_stance
 
             for match in keypoint_matching['matching']:
+
+                if kp == "none":
+                    unmapped_sentences_ids.append({"comment_id": match["comment_id"], "sentence_id": str(match["sentence_id"])})
+
                 if "kp_quality" not in new_kp_matching:
                     kpq = match.get("kp_quality", 0)
                     new_kp_matching["kp_quality"] = kpq
 
-                comment_id = match["comment_id"]
-                sent_id_in_comment = str(match["sentence_id"])
+                KpsResult._add_sentence_to_sentences_data(match, sentences_data)
 
                 new_kp_matching["matching"].append(
-                    {"comment_id": comment_id, "sentence_id": str(sent_id_in_comment), "score": match["score"]})
-                if comment_id not in sentences_data:
-                    sentences_data[comment_id] = {"sents_in_comment": match["sents_in_comment"], "sentences": {}}
+                    {"comment_id": match["comment_id"], "sentence_id": str(match["sentence_id"]), "score": match["score"]})
 
-                if sent_id_in_comment not in sentences_data[comment_id]["sentences"]:
-                    sent_data = {c: match[c] for c in
-                                 ["sentence_text", "span_start", "span_end", "num_tokens", "argument_quality","kp_quality"]}
-                    if "stance" in match:
-                        sent_data["stance"] = dict(match["stance"])
-                    sentences_data[comment_id]["sentences"][sent_id_in_comment] = sent_data.copy()
-
-            new_matchings.append(new_kp_matching)
+            if kp != 'none':
+                new_matchings.append(new_kp_matching)
 
         per_stance_dict = {kps_stance: filter_dict_by_keys(metadata, ['description', 'run_params', 'job_id',
                                                                       'n_sentences_stance', 'n_comments_stance'])}
@@ -582,7 +614,21 @@ class KpsResult:
                                                                  'n_comments_unfiltered']),
                        "per_stance": per_stance_dict}
         return {"keypoint_matchings": new_matchings, "sentences_data": sentences_data, "version": CURR_RESULTS_VERSION,
-                "job_metadata": metadata_v2}
+                "job_metadata": metadata_v2, "unmatched_sentences":unmapped_sentences_ids}
+
+    @staticmethod
+    def _add_sentence_to_sentences_data(match, sentences_data):
+        comment_id = match["comment_id"]
+        sent_id_in_comment = str(match["sentence_id"])
+        if comment_id not in sentences_data:
+            sentences_data[comment_id] = {"sents_in_comment": match["sents_in_comment"], "sentences": {}}
+
+        if sent_id_in_comment not in sentences_data[comment_id]["sentences"]:
+            sent_data = {c: match.get(c) for c in
+                         ["sentence_text", "span_start", "span_end", "num_tokens", "argument_quality", "kp_quality"]}
+            if "stance" in match:
+                sent_data["stance"] = dict(match["stance"])
+            sentences_data[comment_id]["sentences"][sent_id_in_comment] = sent_data.copy()
 
     def _get_number_of_unique_comments(self, include_unmatched=True):
         if include_unmatched:
@@ -635,8 +681,8 @@ class KpsResult:
         No hierarchy is generated in this setting.
         :return: new KpsResult after choosing the top kp for each sentence.
         """
-        new_results_df = self.result_df.sort_values(by=["sentence_text","match_score"], ascending=[True, False])
-        top_preds_df = pd.concat([group.head(1) for _,group in new_results_df.groupby(by="sentence_text")])
+        new_results_df = self.result_df.sort_values(by=["match_score"], ascending=[False])
+        top_preds_df = pd.concat([group.head(1) for _,group in new_results_df.groupby(by=["comment_id","sentence_id"])])
 
         kp_to_args = list(zip(top_preds_df["kp"],zip(top_preds_df["comment_id"], top_preds_df["sentence_id"])))
         kp_to_args = create_dict_to_list(kp_to_args)
@@ -654,7 +700,8 @@ class KpsResult:
         new_keypoint_matchings.sort(key=lambda x: len(x["matching"]), reverse=True)
 
         new_json = {"sentences_data": self.result_json["sentences_data"].copy(), "version": self.result_json["version"],
-                    "job_metadata":new_meta_data, "keypoint_matchings":new_keypoint_matchings}
+                    "job_metadata":new_meta_data, "keypoint_matchings":new_keypoint_matchings,
+                    "unmatched_sentences": self.result_json["unmatched_sentences"]}
 
         return KpsResult.create_from_result_json(new_json)
 
