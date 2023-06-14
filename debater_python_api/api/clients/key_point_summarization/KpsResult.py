@@ -463,7 +463,8 @@ class KpsResult:
                     total_row.append("")
 
             rows.append(row)
-        rows.append(total_row)
+        if len(rows) > 0:
+            rows.append(total_row)
         comparison_df = pd.DataFrame(rows, columns=cols)
 
         if len(set(kp_to_stance.values()).difference({"no-stance", None})) == 0:
