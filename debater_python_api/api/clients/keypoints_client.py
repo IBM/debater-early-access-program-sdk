@@ -34,7 +34,7 @@ class KpsClient():
     '''
     A client for the Key Point Summarization (KPS) service.
     '''
-    def __init__(self, apikey: str, host: Optional[str] = None, verify_certificate: bool = True):
+    def __init__(self, apikey: str, host: Optional[str] = None, verify_certificate: bool = True, timeout_secs: int = 900):
         '''
         :param apikey: User's api-key, should be retreived from the early-access-program site.
         :param host: Optional, enable switching to alternative services.
@@ -46,17 +46,18 @@ class KpsClient():
         self.host = host if host is not None else 'https://keypoint-matching-backend.debater.res.ibm.com'
         self.verify_certificate = verify_certificate
         self.api_version = "2"
+        self.timeout = timeout_secs
 
-    def _delete(self, url, params, timeout=300, retries=10, headers=None):
-        return self._run_request_with_retry(requests.delete, url, params, timeout, retries, headers)
+    def _delete(self, url, params, retries=10, headers=None):
+        return self._run_request_with_retry(requests.delete, url, params, retries, headers)
 
-    def _get(self, url, params, timeout=300, retries=10, headers=None):
-        return self._run_request_with_retry(requests.get, url, params, timeout, retries, headers)
+    def _get(self, url, params, retries=10, headers=None):
+        return self._run_request_with_retry(requests.get, url, params, retries, headers)
 
-    def _post(self, url, body, timeout=300, retries=10, headers=None):
-        return self._run_request_with_retry(requests.post, url, body, timeout, retries, headers)
+    def _post(self, url, body, retries=10, headers=None):
+        return self._run_request_with_retry(requests.post, url, body, retries, headers)
 
-    def _run_request_with_retry(self, func, url, params, timeout=20, retries=10, headers_input=None):
+    def _run_request_with_retry(self, func, url, params, retries=10, headers_input=None):
         headers = get_default_request_header(self.apikey)
         if headers_input is not None:
             headers.update(headers_input)
@@ -67,9 +68,9 @@ class KpsClient():
         while True:
             try:
                 if func.__name__ == 'post':
-                    resp = func(url, json=params, headers=headers, timeout=timeout, verify=self.verify_certificate)
+                    resp = func(url, json=params, headers=headers, timeout=self.timeout, verify=self.verify_certificate)
                 else:
-                    resp = func(url, params=params, headers=headers, timeout=timeout, verify=self.verify_certificate)
+                    resp = func(url, params=params, headers=headers, timeout=self.timeout, verify=self.verify_certificate)
                 if resp.status_code == 200:
                     return resp.json()
                 if resp.status_code == 422:
@@ -169,7 +170,7 @@ class KpsClient():
                     'comments_ids': comments_ids,
                     'comments_texts': comments_texts}
 
-            self._post(url=self.host + comments_endpoint, body=body, retries=10)
+            self._post(url=self.host + comments_endpoint, body=body)
             uploaded += len(batch)
             logging.info('uploaded %d comments, out of %d' % (uploaded, len(ids_texts)))
 
@@ -357,7 +358,7 @@ class KpsClient():
         :return: see description above.
         '''
         params = {'job_id': job_id}
-        return self._get(self.host + kp_extraction_endpoint, params, timeout=180)
+        return self._get(self.host + kp_extraction_endpoint, params)
 
     def cancel_kps_job(self, job_id: str):
         '''
@@ -419,7 +420,7 @@ class KpsClient():
           * 'comments_status': all the domains that the user have and the current status of each domain (number of processed comments, sentences and comments that still need to be processed, similar to get_comments_status method).
           * 'kp_summarization_status': a list of all key point summarization jobs that the user have/had with all the relevant details and parameters for each job.
         '''
-        return self._get(self.host + report_endpoint, {'days_ago': days_ago}, timeout=180)
+        return self._get(self.host + report_endpoint, {'days_ago': days_ago})
 
     def get_comments_limit(self) -> int:
         '''
@@ -427,14 +428,14 @@ class KpsClient():
         returns:
           * 'n_comments_limit': The maximal number of comments permitted per KPS job (None if there is no limit).
         '''
-        return self._get(self.host + comments_limit_endpoint, {}, timeout=180)
+        return self._get(self.host + comments_limit_endpoint, {})
 
     def run_self_check(self):
         '''
         Checks the connection to the service and if the service is UP and running.
         :return: a json with 'status': that have the value UP if all is well and DOWN otherwise.
         '''
-        return self._get(self.host + self_check_endpoint, {}, timeout=180)
+        return self._get(self.host + self_check_endpoint, {})
 
     def get_unmapped_sentences_for_kps_result(self, kps_result: KpsResult):
         '''
