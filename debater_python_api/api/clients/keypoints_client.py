@@ -353,8 +353,6 @@ class KpsClient():
         If the status is DONE, it also has a 'result' key that has the result_json, that can be converted into KpsResults using KpsResult.create_from_result_json(result_json)
         If the status is ERROR, it also has a 'error_msg' key that has the description of the error.
         :param job_id: the job_id (can be found in the future returned when the job was started or in the user-report)
-        :param top_k_kps: use this parameter to truncate the result json to have only the top K key points.
-        :param top_k_sentences_per_kp: use this parameter to truncate the result json to have only the top K matched sentences per key point.
         :return: see description above.
         '''
         params = {'job_id': job_id}

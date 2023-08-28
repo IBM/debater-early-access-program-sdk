@@ -122,7 +122,7 @@ def get_default_request_header(apikey):
 
 
 def filter_dict_by_keys(d, keys):
-    return {k:d[k] for k in keys}
+    return {k:d[k] for k in keys if k in d}
 
 
 def is_list_of_strings(lst):

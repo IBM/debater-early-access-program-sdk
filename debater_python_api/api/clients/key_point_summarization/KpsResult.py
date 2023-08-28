@@ -612,7 +612,7 @@ class KpsResult:
 
         metadata_v2 = {"general": filter_dict_by_keys(metadata, ['domain', 'user_id', 'n_sentences',
                                                                  'n_sentences_unfiltered', 'n_comments',
-                                                                 'n_comments_unfiltered']),
+                                                                 'n_comments_unfiltered','domain_params']),
                        "per_stance": per_stance_dict}
         return {"keypoint_matchings": new_matchings, "sentences_data": sentences_data, "version": CURR_RESULTS_VERSION,
                 "job_metadata": metadata_v2, "unmatched_sentences":unmapped_sentences_ids}
