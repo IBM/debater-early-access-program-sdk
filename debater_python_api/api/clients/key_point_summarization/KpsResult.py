@@ -699,8 +699,12 @@ class KpsResult:
             kp = new_keypoint_matching["keypoint"]
             if kp != "none":
                 kp_stance = new_keypoint_matching.get('stance')
-                arg_for_kp = kp_to_args.get(kp, kp_to_args.get(self._get_kp_stance_str(kp, kp_stance)))
-                new_keypoint_matching["matching"] = list(filter(lambda x: (x["comment_id"],int(x["sentence_id"])) in arg_for_kp, new_keypoint_matching["matching"]))
+                arg_for_kp = kp_to_args.get(kp)
+                if arg_for_kp is None:
+                    kp_stance = self._get_kp_stance_str(kp, kp_stance)
+                    arg_for_kp = kp_to_args.get(kp_stance)
+                if arg_for_kp:
+                    new_keypoint_matching["matching"] = list(filter(lambda x: (x["comment_id"],int(x["sentence_id"])) in arg_for_kp, new_keypoint_matching["matching"]))
             if len(new_keypoint_matching["matching"]) > 0:
                 new_keypoint_matchings.append(new_keypoint_matching)
         new_keypoint_matchings.sort(key=lambda x: len(x["matching"]), reverse=True)
