@@ -144,8 +144,11 @@ class KpsResult:
         if len(self.stances) > 1:
             kp_with_two_stances = list(filter(lambda x: len(kps_to_stance[x]) > 1, kps_to_stance.keys()))
             if len(kp_with_two_stances) > 0:
-                results_df.loc[:,"kp"] = results_df.apply(lambda r: f"{r['kp']} ({r['kp_stance']})" if r['kp'] in kp_with_two_stances else r['kp'], axis = 1)
+                results_df.loc[:,"kp"] = results_df.apply(lambda r: self._get_kp_stance_str(r['kp'], r['kp_stance']) if r['kp'] in kp_with_two_stances else r['kp'], axis = 1)
         return results_df
+
+    def _get_kp_stance_str(self, kp, stance):
+        return f"{kp} ({stance})"
 
     def _result_df_to_summary_df(self):
 
@@ -493,7 +496,6 @@ class KpsResult:
         results_to_kp_to_n_comments.update(
             {title: self._get_kp_stance_to_n_matched_comments(comments_subset=comment_ids) for title, comment_ids in comments_subsets_dict.items()})
 
-        #kp_to_stance = self.get_kp_to_stance()
         return self._get_comparison_df(results_to_kp_to_n_comments, results_to_total_comments, titles)
 
     def compare_with_other_results(self, this_title : str, other_results_dict : Dict[str,'KpsResult']):
@@ -510,10 +512,6 @@ class KpsResult:
 
         results_to_kp_to_n_comments = {this_title:self._get_kp_stance_to_n_matched_comments()}
         results_to_kp_to_n_comments.update({title:result._get_kp_stance_to_n_matched_comments()  for title,result in other_results_dict.items()})
-
-        #kp_to_stance = self.get_kp_to_stance()
-        #for result in other_results_dict.values():
-        #    kp_to_stance.update(result.get_kp_to_stance())
 
         return self._get_comparison_df(results_to_kp_to_n_comments, results_to_total_comments, titles)
 
@@ -700,7 +698,9 @@ class KpsResult:
             new_keypoint_matching = keypoint_matching.copy()
             kp = new_keypoint_matching["keypoint"]
             if kp != "none":
-                new_keypoint_matching["matching"] = list(filter(lambda x: (x["comment_id"],int(x["sentence_id"])) in kp_to_args[kp], new_keypoint_matching["matching"]))
+                kp_stance = new_keypoint_matching.get('stance')
+                arg_for_kp = kp_to_args.get(kp, kp_to_args.get(self._get_kp_stance_str(kp, kp_stance)))
+                new_keypoint_matching["matching"] = list(filter(lambda x: (x["comment_id"],int(x["sentence_id"])) in arg_for_kp, new_keypoint_matching["matching"]))
             if len(new_keypoint_matching["matching"]) > 0:
                 new_keypoint_matchings.append(new_keypoint_matching)
         new_keypoint_matchings.sort(key=lambda x: len(x["matching"]), reverse=True)
@@ -717,7 +717,7 @@ class KpsResult:
         elif len(self.stances) == 1:
             return list(self.stances)[0]
         return "pro and con"
-
-    def get_kp_to_stance(self):
-         keypoint_matchings = self.result_json["keypoint_matchings"]
-         return {keypoint_matching['keypoint']:keypoint_matching.get("stance", None) for keypoint_matching in keypoint_matchings}
+    #
+    # def get_kp_to_stance(self):
+    #      keypoint_matchings = self.result_json["keypoint_matchings"]
+    #      return {keypoint_matching['keypoint']:keypoint_matching.get("stance", None) for keypoint_matching in keypoint_matchings}
