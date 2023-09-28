@@ -410,15 +410,21 @@ class KpsClient():
         '''
         return self._delete(self.host + data_endpoint, {'clear_kp_analysis_jobs_log': False, 'clear_db': True})
 
-    def get_full_report(self, days_ago=30):
+    def get_full_report(self, days_ago=30, active_domains_only=False):
         '''
         Retreives a json with the user's report.
         :param days_ago: key point summarization jobs older then this parameter will be filtered out
+        :param active_domains_only: If true, returns only jobs of domains that were not deleted
         returns: The report which consists:
           * 'comments_status': all the domains that the user have and the current status of each domain (number of processed comments, sentences and comments that still need to be processed, similar to get_comments_status method).
           * 'kp_summarization_status': a list of all key point summarization jobs that the user have/had with all the relevant details and parameters for each job.
         '''
-        return self._get(self.host + report_endpoint, {'days_ago': days_ago})
+        user_report = self._get(self.host + report_endpoint, {'days_ago': days_ago})
+
+        if active_domains_only:
+            domains = [domain_status['domain'] for domain_status in user_report["domains_status"]]
+            user_report['kp_analysis_status'] = list(filter(lambda x: x["domain"] in domains, user_report['kp_analysis_status']))
+        return user_report
 
     def get_comments_limit(self) -> int:
         '''
