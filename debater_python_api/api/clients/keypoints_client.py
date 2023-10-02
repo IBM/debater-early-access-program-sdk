@@ -229,7 +229,8 @@ class KpsClient():
         return run_params
 
     def run_full_kps_flow(self, domain: str, comments_texts: List[str],
-                          stance: Optional[str] = Stance.EACH_STANCE.value):
+                          stance: Optional[str] = Stance.EACH_STANCE.value,
+                          run_params: Optional[Dict[str, Any]] = None):
         '''
         This is the simplest way to use the Key Point Summarization system.
         This method uploads the comments into a temporary domain, waits for them to be processed,
@@ -244,6 +245,7 @@ class KpsClient():
         :param stance: Optional, If "no-stance" - run on all the data disregarding the stance.
         If "pro", run on positive sentences only, if "con", run on con sentences (negative and suggestions).
         If "each-stance", starts two kps jobs, one for each stance, and returns the merged result object.
+        :param run_params: Optional, a dictionary with different parameters and their values, to be sent to the kps job.
         :return: a KpsResult object with the result
         '''
         if len(comments_texts) > 10000:
@@ -254,9 +256,9 @@ class KpsClient():
             comments_ids = [str(i) for i in range(len(comments_texts))]
             self.upload_comments(domain, comments_ids, comments_texts)
             if stance == Stance.EACH_STANCE.value:
-                keypoint_matching = self.run_kps_job_both_stances(domain)
+                keypoint_matching = self.run_kps_job_both_stances(domain, run_params_pro=run_params, run_params_con=run_params)
             else:
-                keypoint_matching = self.run_kps_job(domain, stance=stance)
+                keypoint_matching = self.run_kps_job(domain, stance=stance, run_params=run_params)
             return keypoint_matching
         except KpsIllegalInputException as e:
             if 'already exist' in str(e):
