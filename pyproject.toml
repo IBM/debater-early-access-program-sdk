@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "debater_python_api"
-version = "5.0.9"
+version = "5.1.0"
 description = "Project Debater Early Access Program API sdk for python"
 readme = "README.md"
 authors = [{ name = "Elad Venezian", email = "eladv@il.ibm.com" }]
@@ -22,7 +22,6 @@ dependencies = [
     "matplotlib",
     "numpy",
     "pandas",
-    "spacy",
     "PyHamcrest",
     "python-docx",
     "networkx"
