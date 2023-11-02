@@ -318,12 +318,15 @@ class KpsResult:
         :param result_name: name of the results to appear in the output files.
         :param n_matches_in_docx: optional, number of top matches to write in the textual summary (docx file). Pass None for all matches.
         :param include_match_score_in_docx: optional, when set to true, the match score between the sentence and the key point is added.
-        Creates 3 outout files:
+        Creates 4 outout files:
+             * <ouput_dir>/<result_name>.json : this results as a json file.
              * <ouput_dir>/<result_name>.csv : full results as csv .
              * <ouput_dir>/<result_name>_kps_summary.csv : summary results as csv.
              *  <result_file>_hierarchical.docx: This Microsoft Word document shows the key point hierarchy and matching sentences
             as a user-friendly report.
         """
+        json_results_name = os.path.join(output_dir, result_name+".json")
+        self.save(json_results_name)
 
         result_file = os.path.join(output_dir, result_name+".csv")
         write_df_to_file(self.result_df, result_file)
