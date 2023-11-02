@@ -569,6 +569,42 @@ class KpsResult:
         filter_min_relations = np.min([pro_result.filter_min_relations, con_result.filter_min_relations])
         return KpsResult.create_from_result_json(combined_results_json, filter_min_relations=filter_min_relations)
 
+    def get_single_stance_from_merged_results(self, stance):
+        stances = list(self.get_stance_to_job_id().keys())
+        if len(stances) == 1:
+            if stances[0] == stance:
+                logging.info("Results already contain the requested stance only, retuning self")
+                return self
+
+        assert stance in stances, f"Requested stance ({stance}) not in results  stance: ({stances})."
+
+        merged_json = self.result_json
+        new_metadata = {"general": merged_json["job_metadata"]["general"],
+                        "per_stance": {stance: merged_json["job_metadata"]["per_stance"][stance]}
+                        }
+
+        new_keypoint_matchings = []
+        new_unmatched = merged_json["unmatched_sentences"].copy()
+        for keypoint_matching in merged_json["keypoint_matchings"]:
+            if keypoint_matching["stance"] == stance:
+                new_keypoint_matchings.append(keypoint_matching)
+            else:
+                for matching in keypoint_matching["matching"]:
+                    unmatched = {"comment_id": matching["comment_id"],
+                                 "sentence_id": matching["sentence_id"]}
+                    if unmatched not in new_unmatched:
+                        new_unmatched.append(unmatched)
+
+        new_results_json = {
+                    "keypoint_matchings": new_keypoint_matchings,
+                    "sentences_data": merged_json["sentences_data"].copy(),
+                    "unmatched_sentences": list(new_unmatched),
+                    "version": merged_json["version"],
+                    "job_metadata": new_metadata
+                   }
+
+        return KpsResult.create_from_result_json(new_results_json, filter_min_relations=self.filter_min_relations)
+
     @staticmethod
     # If result_json is of the old server version, convert to version 2.0
     # 1.0 - received from the server, must have only one stance (merging pro_con is only on v2)
