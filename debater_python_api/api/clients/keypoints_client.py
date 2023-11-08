@@ -346,16 +346,17 @@ class KpsClient():
         logging.info(f'started a kp summarization job - domain: {domain}, stance: {stance}, run_params: {run_params}, {"" if description is None else f"description: {description}, "}job_id: {res["job_id"]}')
         return KpsJobFuture(self, res['job_id'])
 
-    def get_kps_job_status(self, job_id: str):
+    def get_kps_job_status(self, job_id: str, fetch_results: Optional[bool] = True):
         '''
         Checks for the status of a key point summarization job. It returns a json with a 'status' key that can have one of the following values: PENDING, PROCESSING, DONE, CANCELED, ERROR
         If the status is PROCESSING, it also has a 'progress' key that describes the calculation progress.
         If the status is DONE, it also has a 'result' key that has the result_json, that can be converted into KpsResults using KpsResult.create_from_result_json(result_json)
         If the status is ERROR, it also has a 'error_msg' key that has the description of the error.
         :param job_id: the job_id (can be found in the future returned when the job was started or in the user-report)
+        :param fetch_results: default to True, if false and the status is DONE - returns None
         :return: see description above.
         '''
-        params = {'job_id': job_id}
+        params = {'job_id': job_id, 'fetch_results': fetch_results}
         return self._get(self.host + kp_extraction_endpoint, params)
 
     def cancel_kps_job(self, job_id: str):
