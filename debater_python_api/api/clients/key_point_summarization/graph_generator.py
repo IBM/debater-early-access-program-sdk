@@ -7,7 +7,7 @@ from debater_python_api.api.clients.key_point_summarization.utils import create_
     get_unique_sent_id, sort_dict_items_by_value_then_key
 import networkx as nx
 
-def create_graph_data(full_results_df, n_sentences, min_n_similar_matches=5, n_matches_samples=20):
+def create_graph_data(full_results_df, n_sentences, min_n_similar_matches=3, n_matches_samples=20):
     def graph_to_graph_data(graph, n_sentences):
         for node in graph['nodes']:
             node['relative_val'] = float(node['n_matches']) / float(n_sentences)
