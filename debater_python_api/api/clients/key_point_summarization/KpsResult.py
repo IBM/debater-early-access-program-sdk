@@ -302,7 +302,8 @@ class KpsResult:
             hierarchical_graph_full_data,
             self.result_df, self.filter_min_relations, n_top_matches_in_graph)
 
-        new_kp_id_to_hierarchical_data = get_hierarchical_kps_data(self.result_df, new_hierarchical_graph_data, self.filter_min_relations)
+        new_kp_id_to_hierarchical_data = get_hierarchical_kps_data(self.result_df, new_hierarchical_graph_data,
+                                        filter_min_relation_strength = self.filter_min_relations)
         self.generate_docx_report(output_dir, result_name,
                             n_matches_in_docx=n_matches_in_docx,
                             include_match_score_in_docx=include_match_score_in_docx,
@@ -704,7 +705,8 @@ class KpsResult:
     def _get_kp_id_to_hierarchical_data(self):
         graph_data = create_graph_data(self.result_df, n_sentences=self._get_number_of_unique_sentences())
         hierarchical_graph_data = graph_data_to_hierarchical_graph_data(graph_data=graph_data, filter_min_relations=self.filter_min_relations)
-        return get_hierarchical_kps_data(self.result_df, hierarchical_graph_data, self.filter_min_relations)
+        return get_hierarchical_kps_data(self.result_df, hierarchical_graph_data,
+                                        filter_min_relation_strength = self.filter_min_relations)
 
     @staticmethod
     def _get_stance_from_server_stances(server_stances):

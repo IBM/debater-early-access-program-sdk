@@ -285,7 +285,7 @@ def get_unique_matches_subtree(node_id, id_to_data, id_to_kids, id_to_n_unique_m
     return kp_unique_sentences
 
 
-def get_hierarchical_kps_data(full_result_df, graph_data, min_n_matches = 5, filter_min_relation_strength = 0.4):
+def get_hierarchical_kps_data(full_result_df, graph_data, min_n_matches = 1, filter_min_relation_strength = 0.4):
 
     graph_data = filter_graph_by_relation_strength(graph_data, filter_min_relation_strength)
 
