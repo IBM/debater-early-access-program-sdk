@@ -5,9 +5,9 @@ requires = ["setuptools>=61.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "debater_python_api"
-version = "5.1.5"
-description = "Project Debater Early Access Program API sdk for python"
+name = "key-points-summarization-sdk"
+version = "1.0.0"
+description = "A python API sdk for Key Points Summarization"
 readme = "README.md"
 authors = [{ name = "Elad Venezian", email = "eladv@il.ibm.com" }]
 license = { file = "LICENSE" }
@@ -18,19 +18,9 @@ classifiers = [
 dependencies = [
     "requests",
     "scikit-learn",
-    "matplotlib",
     "numpy",
     "pandas",
     "python-docx",
     "networkx"
 ]
 requires-python = ">=3.6"
-
-#[project.optional-dependencies]
-#dev = ["black", "bumpver", "isort", "pip-tools", "pytest"]
-
-#[project.urls]
-#Homepage = "https://github.com/realpython/reader"
-
-#[project.scripts]
-#realpython = "reader.__main__:main"

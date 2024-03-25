@@ -2,7 +2,7 @@ import datetime
 import logging
 
 from typing import Optional, List
-from debater_python_api.api.clients.keypoints_client import KpsClient
+from key_points_summarization_api.api.clients.keypoints_client import KpsClient
 
 admin_reports_endpoint = '/admin_report'
 admin_actions_endpoint = '/admin_action'

@@ -1,2 +1,0 @@
-Soldier,Loneliness
-Army,Soldier

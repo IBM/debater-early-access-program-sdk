@@ -1,19 +1,18 @@
 import json
 import logging
 import time
-import calendar
 import traceback
 from enum import Enum
 
 import pandas as pd
 import requests
 
-from debater_python_api.api.clients.key_point_summarization.KpsResult import KpsResult
-from debater_python_api.api.clients.key_point_summarization.utils import get_default_request_header, \
+from key_points_summarization_api.api.clients.key_point_summarization.KpsResult import KpsResult
+from key_points_summarization_api.api.clients.key_point_summarization.utils import get_default_request_header, \
     update_row_with_stance_data, validate_api_key_or_throw_exception, print_progress_bar, is_list_of_strings
 
 from typing import List, Optional, Dict, Union, Any
-from debater_python_api.api.clients.key_point_summarization.KpsExceptions import KpsIllegalInputException, \
+from key_points_summarization_api.api.clients.key_point_summarization.KpsExceptions import KpsIllegalInputException, \
     KpsNoPrivilegesException, KpsInvalidOperationException
 
 domains_endpoint = '/domains'

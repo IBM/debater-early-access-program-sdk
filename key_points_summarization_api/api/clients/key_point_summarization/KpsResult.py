@@ -1,18 +1,16 @@
-import ast
 import json
 import logging
-import math
 from collections import defaultdict
 from typing import Optional, Dict, List
 
 import pandas as pd
 import numpy as np
 
-from debater_python_api.api.clients.key_point_summarization.KpsExceptions import KpsIllegalInputException
-from debater_python_api.api.clients.key_point_summarization.utils import read_dicts_from_df, create_dict_to_list, \
+from key_points_summarization_api.api.clients.key_point_summarization.KpsExceptions import KpsIllegalInputException
+from key_points_summarization_api.api.clients.key_point_summarization.utils import read_dicts_from_df, create_dict_to_list, \
     write_df_to_file, get_unique_sent_id, filter_dict_by_keys, update_row_with_stance_data
-from debater_python_api.api.clients.key_point_summarization.docx_generator import save_hierarchical_graph_data_to_docx
-from debater_python_api.api.clients.key_point_summarization.graph_generator import create_graph_data, graph_data_to_hierarchical_graph_data, \
+from key_points_summarization_api.api.clients.key_point_summarization.docx_generator import save_hierarchical_graph_data_to_docx
+from key_points_summarization_api.api.clients.key_point_summarization.graph_generator import create_graph_data, graph_data_to_hierarchical_graph_data, \
     get_hierarchical_graph_from_tree_and_subset_results, get_hierarchical_kps_data
 import os
 CURR_RESULTS_VERSION = "2.0"

@@ -3,7 +3,7 @@ import json
 import logging
 import pandas as pd
 import numpy as np
-from debater_python_api.api.clients.key_point_summarization.utils import create_dict_to_list, read_dicts_from_df, \
+from key_points_summarization_api.api.clients.key_point_summarization.utils import create_dict_to_list, read_dicts_from_df, \
     get_unique_sent_id, sort_dict_items_by_value_then_key
 import networkx as nx
 
