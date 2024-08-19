@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "key-points-summarization-sdk"
-version = "1.0.0"
+version = "1.0.1"
 description = "A python API sdk for Key Points Summarization"
 readme = "README.md"
 authors = [{ name = "Elad Venezian", email = "eladv@il.ibm.com" }]

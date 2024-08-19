@@ -662,3 +662,8 @@ class KpsJobFuture:
                 if stage_i in progress and 'inferred_batches' in progress[stage_i] and 'total_batches' in progress[stage_i]:
                     print_progress_bar(progress[stage_i]['inferred_batches'], progress[stage_i]['total_batches'], prefix='Stage %s/%s:' % (stage, str(total_stages)), suffix='Complete', length=50)
                     break
+
+
+class KpsClientWatsonStudio(KpsClient):
+    def __init__(self, port=9004):
+        super().__init__(apikey='00000000000000000000000000000000L10', host=f'http://localhost:{port}', verify_certificate=False)
