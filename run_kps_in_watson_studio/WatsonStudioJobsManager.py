@@ -1,6 +1,8 @@
 import requests
 import time
 
+from requests import HTTPError
+
 
 class WatsonStudioJobsManager:
     """
@@ -44,8 +46,38 @@ class WatsonStudioJobsManager:
             "apikey": self.api_key,
             "grant_type": "urn:ibm:params:oauth:grant-type:apikey"
         })
-        response.raise_for_status()
+        self.raise_for_status(response)
         return response.json()["access_token"]
+
+    def raise_for_status(self, response):
+        """Raises :class:`HTTPError`, if one occurred."""
+
+        http_error_msg = ""
+        if isinstance(response.reason, bytes):
+            # Attempt to decode utf-8 first for localized strings; fall back to iso-8859-1
+            try:
+                reason = response.reason.decode("utf-8")
+            except UnicodeDecodeError:
+                reason = response.reason.decode("iso-8859-1")
+        else:
+            reason = response.reason
+
+        if 400 <= response.status_code < 500:
+            http_error_msg = (
+                f"{response.status_code} Client Error: {reason} for url: {response.url}"
+            )
+
+        elif 500 <= response.status_code < 600:
+            http_error_msg = (
+                f"{response.status_code} Server Error: {reason} for url: {response.url}"
+            )
+
+        # Append response text if it exists
+        if http_error_msg and hasattr(response, 'text'):
+            http_error_msg += f"\nResponse text: {response.text}"
+
+        if http_error_msg:
+            raise HTTPError(http_error_msg, response=response)
 
     def create_job(self, job_name, notebook_asset_ref, env_variables:list[str]=None):
         """
@@ -68,9 +100,8 @@ class WatsonStudioJobsManager:
         if env_variables:
             job_data['job']['configuration'] = {'env_variables': env_variables}
 
-
         response = requests.post(self.base_url, headers=self.headers, json=job_data, params=self.params)
-        response.raise_for_status()
+        self.raise_for_status(response)
         return response.json()['asset_id']
 
     def start_run(self, job_id):
@@ -85,7 +116,7 @@ class WatsonStudioJobsManager:
         """
         url = f"{self.base_url}/{job_id}/runs"
         response = requests.post(url, headers=self.headers, params=self.params)
-        response.raise_for_status()
+        self.raise_for_status(response)
         return response.json()['metadata']['asset_id']
 
     def get_all_jobs(self):
@@ -96,7 +127,7 @@ class WatsonStudioJobsManager:
             list: List of jobs with their details.
         """
         response = requests.get(self.base_url, headers=self.headers, params=self.params)
-        response.raise_for_status()
+        self.raise_for_status(response)
         return response.json()['results']
 
     def get_last_job_id(self):
@@ -143,7 +174,7 @@ class WatsonStudioJobsManager:
         """
         url = f"{self.base_url}/{job_id}"
         response = requests.get(url, headers=self.headers, params=self.params)
-        response.raise_for_status()
+        self.raise_for_status(response)
         return response.json()
 
     def get_job_runs(self, job_id, limit=None):
@@ -163,7 +194,7 @@ class WatsonStudioJobsManager:
             params = self.params.copy()
             params['limit'] = limit
         response = requests.get(url, headers=self.headers, params=params)
-        response.raise_for_status()
+        self.raise_for_status(response)
         return response.json()['results']
 
     def get_last_run(self, job_id):
@@ -204,7 +235,7 @@ class WatsonStudioJobsManager:
         """
         url = f"{self.base_url}/{job_id}/runs/{run_id}"
         response = requests.get(url, headers=self.headers, params=self.params)
-        response.raise_for_status()
+        self.raise_for_status(response)
         return response.json()
 
     def get_run_state(self, job_id, run_id):
@@ -233,7 +264,7 @@ class WatsonStudioJobsManager:
         """
         url = f"{self.base_url}/{job_id}/runs/{run_id}/cancel"
         response = requests.post(url, headers=self.headers, params=self.params)
-        response.raise_for_status()
+        self.raise_for_status(response)
         return response.status_code == 200
 
     def delete_run(self, job_id, run_id):
@@ -249,7 +280,7 @@ class WatsonStudioJobsManager:
         """
         url = f"{self.base_url}/{job_id}/runs/{run_id}"
         response = requests.delete(url, headers=self.headers, params=self.params)
-        response.raise_for_status()
+        self.raise_for_status(response)
         return response.status_code == 204
 
     def delete_job(self, job_id):
@@ -264,7 +295,7 @@ class WatsonStudioJobsManager:
         """
         url = f"{self.base_url}/{job_id}"
         response = requests.delete(url, headers=self.headers, params=self.params)
-        response.raise_for_status()
+        self.raise_for_status(response)
         return response.status_code == 204
 
     def wait_for_run(self, job_id, run_id, interval=30):
@@ -299,7 +330,7 @@ class WatsonStudioJobsManager:
         """
         url = f"{self.base_url}/{job_id}/runs/{run_id}/logs"
         response = requests.get(url, headers=self.headers, params=self.params)
-        response.raise_for_status()
+        self.raise_for_status(response)
         return response.json()['results']
 
     def get_all_envs(self):
@@ -311,7 +342,7 @@ class WatsonStudioJobsManager:
         """
         url = "https://api.dataplatform.cloud.ibm.com/v2/environments"
         response = requests.get(url, headers=self.headers, params=self.params)
-        response.raise_for_status()
+        self.raise_for_status(response)
         return response.json().get('resources', [])
 
 
