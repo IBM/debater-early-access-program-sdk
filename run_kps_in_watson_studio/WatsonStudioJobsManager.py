@@ -37,6 +37,7 @@ class WatsonStudioJobsManager:
 
     def update_token_if_needed(self):
         if self.token is None or datetime.now() - self.token_updated_at > timedelta(minutes=10):
+            print(f'updating token')
             self.token = self._get_iam_token()
             self.token_updated_at = datetime.now()
             self.headers = {
