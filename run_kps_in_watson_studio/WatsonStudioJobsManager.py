@@ -1,8 +1,10 @@
+from datetime import datetime, timedelta
+
 import requests
 import time
 
 from requests import HTTPError
-
+from datetime import datetime, timedelta
 
 class WatsonStudioJobsManager:
     """
@@ -26,13 +28,21 @@ class WatsonStudioJobsManager:
             project_id (str): Project ID.
         """
         self.api_key = api_key
-        self.token = self._get_iam_token()
-        self.headers = {
-            "Authorization": f"Bearer {self.token}",
-            "Content-Type": "application/json"
-        }
+        self.token_updated_at = None
+        self.token = None
+        self.headers = None
+        self.update_token_if_needed()
         self.params = {"project_id": project_id}
         self.base_url = "https://api.dataplatform.cloud.ibm.com/v2/jobs"
+
+    def update_token_if_needed(self):
+        if self.token is None or datetime.now() - self.token_updated_at > timedelta(minutes=10):
+            self.token = self._get_iam_token()
+            self.token_updated_at = datetime.now()
+            self.headers = {
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/json"
+            }
 
     def _get_iam_token(self):
         """
