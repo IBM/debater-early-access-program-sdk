@@ -100,6 +100,7 @@ class WatsonStudioJobsManager:
         Returns:
             str: Asset ID of the created job.
         """
+        self.update_token_if_needed()
         job_data = {
             "job": {
                 "name": job_name,
@@ -124,6 +125,7 @@ class WatsonStudioJobsManager:
         Returns:
             str: Asset ID of the job run.
         """
+        self.update_token_if_needed()
         url = f"{self.base_url}/{job_id}/runs"
         response = requests.post(url, headers=self.headers, params=self.params)
         self.raise_for_status(response)
@@ -136,6 +138,7 @@ class WatsonStudioJobsManager:
         Returns:
             list: List of jobs with their details.
         """
+        self.update_token_if_needed()
         response = requests.get(self.base_url, headers=self.headers, params=self.params)
         self.raise_for_status(response)
         return response.json()['results']
@@ -147,6 +150,7 @@ class WatsonStudioJobsManager:
         Returns:
             str: Last job ID.
         """
+        self.update_token_if_needed()
         all_jobs = self.get_all_jobs()
         last_job_id = all_jobs[-1]['metadata']['asset_id']
         return last_job_id
@@ -164,6 +168,7 @@ class WatsonStudioJobsManager:
         Raises:
             Exception: If no job with the specified name is found.
         """
+        self.update_token_if_needed()
         all_jobs = self.get_all_jobs()
         jobs_with_name = [j for j in all_jobs if j['metadata']['name'] == job_name]
         if len(jobs_with_name) >= 1:
@@ -182,6 +187,7 @@ class WatsonStudioJobsManager:
         Returns:
             dict: Job status details.
         """
+        self.update_token_if_needed()
         url = f"{self.base_url}/{job_id}"
         response = requests.get(url, headers=self.headers, params=self.params)
         self.raise_for_status(response)
@@ -198,6 +204,7 @@ class WatsonStudioJobsManager:
         Returns:
             list: List of job runs.
         """
+        self.update_token_if_needed()
         url = f"{self.base_url}/{job_id}/runs"
         params = self.params
         if limit:
@@ -217,6 +224,7 @@ class WatsonStudioJobsManager:
         Returns:
             dict: Details of the last job run.
         """
+        self.update_token_if_needed()
         results = self.get_job_runs(job_id=job_id, limit=1)
         return results[0]
 
@@ -230,6 +238,7 @@ class WatsonStudioJobsManager:
         Returns:
             str: ID of the last job run.
         """
+        self.update_token_if_needed()
         return self.get_last_run(job_id=job_id)['metadata']['asset_id']
 
     def get_run(self, job_id, run_id):
@@ -243,6 +252,7 @@ class WatsonStudioJobsManager:
         Returns:
             dict: Details of the job run.
         """
+        self.update_token_if_needed()
         url = f"{self.base_url}/{job_id}/runs/{run_id}"
         response = requests.get(url, headers=self.headers, params=self.params)
         self.raise_for_status(response)
@@ -259,6 +269,7 @@ class WatsonStudioJobsManager:
         Returns:
             str: State of the job run.
         """
+        self.update_token_if_needed()
         return self.get_run(job_id, run_id)['entity']['job_run']['state'].lower()
 
     def cancel_run(self, job_id, run_id):
@@ -272,6 +283,7 @@ class WatsonStudioJobsManager:
         Returns:
             bool: True if cancellation was successful, False otherwise.
         """
+        self.update_token_if_needed()
         url = f"{self.base_url}/{job_id}/runs/{run_id}/cancel"
         response = requests.post(url, headers=self.headers, params=self.params)
         self.raise_for_status(response)
@@ -288,6 +300,7 @@ class WatsonStudioJobsManager:
         Returns:
             bool: True if deletion was successful, False otherwise.
         """
+        self.update_token_if_needed()
         url = f"{self.base_url}/{job_id}/runs/{run_id}"
         response = requests.delete(url, headers=self.headers, params=self.params)
         self.raise_for_status(response)
@@ -303,6 +316,7 @@ class WatsonStudioJobsManager:
         Returns:
             bool: True if deletion was successful, False otherwise.
         """
+        self.update_token_if_needed()
         url = f"{self.base_url}/{job_id}"
         response = requests.delete(url, headers=self.headers, params=self.params)
         self.raise_for_status(response)
@@ -320,6 +334,7 @@ class WatsonStudioJobsManager:
         Returns:
             str: Final state of the job run.
         """
+        self.update_token_if_needed()
         while True:
             run_state = self.get_run_state(job_id=job_id, run_id=run_id)
             print(f"Job {job_id}, run: {run_id}, state: {run_state}")
@@ -338,6 +353,7 @@ class WatsonStudioJobsManager:
         Returns:
             list: List of log entries.
         """
+        self.update_token_if_needed()
         url = f"{self.base_url}/{job_id}/runs/{run_id}/logs"
         response = requests.get(url, headers=self.headers, params=self.params)
         self.raise_for_status(response)
@@ -350,6 +366,7 @@ class WatsonStudioJobsManager:
         Returns:
             list: List of environment details.
         """
+        self.update_token_if_needed()
         url = "https://api.dataplatform.cloud.ibm.com/v2/environments"
         response = requests.get(url, headers=self.headers, params=self.params)
         self.raise_for_status(response)
