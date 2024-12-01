@@ -38,7 +38,7 @@ if __name__ == '__main__':
                                         endpoint_url=cos_endpoint_url,
                                         bucket_name=cos_bucket_name)
 
-    mongodb_use_remote_db = True  # When set to False - uses a non-persistent in-memory MongoDB
+    mongodb_use_remote_db = False  # When set to False - uses a non-persistent in-memory MongoDB
     mongodb_username = os.getenv("MONGODB_USERNAME")
     mongodb_password = os.getenv("MONGODB_PASSWORD")
     mongodb_endpoint = os.getenv("MONGODB_ENDPOINT")
@@ -46,25 +46,27 @@ if __name__ == '__main__':
     mongodb_certificate_in_cos = os.path.basename(mongodb_certificate_locally)
     cos_files_manager.upload_file(mongodb_certificate_locally, mongodb_certificate_in_cos)
 
-    csv_file_locally = '/Users/yoavkantor/Downloads/austin_3k_comments_and_ids.csv'
+    csv_file_locally = '/Users/yoavkantor/Library/CloudStorage/Box-Box/RAG Activities/agentic/ask_sales/feedbacks/datasets/meta_llama_llama_3_1_70b_instruct/ask_sales_feedbacks_kps_comments.csv'
     csv_file_in_cos = os.path.basename(csv_file_locally)
     cos_files_manager.upload_file(csv_file_locally, csv_file_in_cos)
 
     job_input = {
         'mongodb_params': {
             'mongodb_use_remote_db': mongodb_use_remote_db,
-            'mongodb_username': mongodb_username,
-            'mongodb_password': mongodb_password,
-            'mongodb_endpoint': mongodb_endpoint,
-            'mongodb_certificate_in_cos': mongodb_certificate_in_cos
+            # 'mongodb_username': mongodb_username,
+            # 'mongodb_password': mongodb_password,
+            # 'mongodb_endpoint': mongodb_endpoint,
+            # 'mongodb_certificate_in_cos': mongodb_certificate_in_cos
         },
         'domains_to_delete_before': ['test_domain'],
+        'create_domains': [{'domain': 'test_domain', 'domain_params': {}}],
         'csvs_to_upload_data': [{'domain': 'test_domain',
                             # 'csvs_to_upload_folders': [{'folder_name': '', 'ids_column': '', 'texts_column': ''}],
-                            'csvs_to_upload_files': [{'file_name': csv_file_in_cos, 'ids_column': 'id', 'texts_column': 'comment', 'limit': 10}]}],
+                            'csvs_to_upload_files': [{'file_name': csv_file_in_cos, 'ids_column': 'id', 'texts_column': 'comment'}]}],
         'kps_jobs_to_run': [{'domain': 'test_domain',
                              'results_folder_name': 'test_domain_result',
-                             'delete_domain_when_finished': True
+                             'delete_domain_when_finished': True,
+                             'run_both_stances': False
                              }],
         'domains_to_delete_after': [],
     }
@@ -107,7 +109,7 @@ if __name__ == '__main__':
         log = "\n".join(log_lines)
         print(f'log: {log}')
 
-        for kps_jobs in job_input['kps_jobs_to_run']:
+        for kps_jobs in job_input.get('kps_jobs_to_run', []):
             results_folder_name = kps_jobs['results_folder_name']
             cos_files_manager.download_folder(results_folder_name, f'./kps_results/{results_folder_name}')
 
