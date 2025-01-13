@@ -153,7 +153,7 @@ class WatsonStudioJobsManager:
         """
         self.update_token_if_needed()
         all_jobs = self.get_all_jobs()
-        last_job_id = all_jobs[-1]['metadata']['asset_id']
+        last_job_id = all_jobs[0]['metadata']['asset_id']
         return last_job_id
 
     def get_job_id_by_name(self, job_name):
